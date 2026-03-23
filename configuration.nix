@@ -62,7 +62,7 @@
 
   # Configure keymap in X11
   services.xserver.xkb.layout = "us,ru";
-  # services.xserver.xkb.options = "eurosign:e,caps:escape";
+  services.xserver.xkb.options = "grp:alt_shift_toggle,grp_led:scroll"; # Switch key
 
   # Enable CUPS to print documents.
   # services.printing.enable = true;
@@ -102,6 +102,16 @@
       "wheel"
       "i2c"
     ]; # Enable ‘sudo’ for the user.
+  };
+
+  users.groups.openclaw = { };
+  users.users.openclaw = {
+    isNormalUser = true;
+    home = "/home/openclaw";
+    createHome = true;
+    group = "openclaw";
+    linger = true;
+    description = "OpenClaw service account";
   };
 
   nixpkgs.config.allowUnfree = true;

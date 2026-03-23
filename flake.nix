@@ -10,6 +10,8 @@
       url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    nix-openclaw.url = "github:openclaw/nix-openclaw";
   };
 
   outputs =
@@ -17,6 +19,7 @@
       self,
       nixpkgs,
       home-manager,
+      nix-openclaw,
       ...
     }@inputs:
     {
@@ -24,7 +27,6 @@
         system = "x86_64-linux";
         specialArgs = { inherit inputs; };
         modules = [
-          # Твои стандартные файлы конфигурации
           ./hardware-configuration.nix
           ./configuration.nix
 
@@ -34,6 +36,8 @@
             home-manager.useUserPackages = true;
             home-manager.extraSpecialArgs = { inherit inputs; };
             home-manager.users.aleroza = import ./home.nix;
+
+            home-manager.users.openclaw = import ./home-openclaw.nix;
           }
         ];
       };
