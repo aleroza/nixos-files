@@ -2,40 +2,37 @@
 {
   config,
   pkgs,
-  inputs,
   ...
 }:
 {
-  imports = [
-    inputs.nix-openclaw.homeManagerModules.openclaw
-  ];
-
   home.username = "openclaw";
   home.homeDirectory = "/home/openclaw";
   home.stateVersion = "25.11";
 
   programs.home-manager.enable = true;
 
-  programs.openclaw = {
-    enable = true;
+  # Install OpenClaw package for the user (config managed manually)
+  home.packages = [ pkgs.openclaw ];
 
-    # Keep secrets out of the Nix store; the upstream README says the gateway
-    # token and provider keys should come from env/files, not hardcoded values.
-    # gateway.auth.token = "...";
-
-    config = {
-      gateway = {
-        mode = "local";
-      };
-
-      # channels.telegram = {
-      #   tokenFile = "/run/agenix/telegram-bot-token";
-      #   allowFrom = [ 12345678 ];
-      # };
+  # OpenClaw user service - runs the gateway with existing config
+  systemd.user.services.openclaw-gateway = {
+    Unit = {
+      Description = "OpenClaw Gateway";
+      After = [ "network.target" ];
     };
-
-    # Use the current upstream option names if you add tools/plugins later:
-    # bundledPlugins = { summarize.enable = true; };
-    # customPlugins = [ { source = "github:owner/repo"; } ];
+    Service = {
+      Type = "simple";
+      ExecStart = "${pkgs.openclaw}/bin/openclaw-gateway";
+      Restart = "on-failure";
+      RestartSec = "10";
+      # Use existing config file location
+      Environment = [
+        "OPENCLAW_CONFIG=/home/openclaw/.openclaw/openclaw.json"
+        "OPENCLAW_BUNDLED_PLUGINS_DIR=/nix/store/i01qh39d4cczsrmvid5h18jgzq1n1gn0-openclaw-gateway-unstable-823a09ac/lib/openclaw/extensions"
+      ];
+    };
+    Install = {
+      WantedBy = [ "default.target" ];
+    };
   };
 }

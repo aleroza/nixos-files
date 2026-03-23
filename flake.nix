@@ -10,8 +10,6 @@
       url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
-    nix-openclaw.url = "github:openclaw/nix-openclaw";
   };
 
   outputs =
@@ -19,7 +17,6 @@
       self,
       nixpkgs,
       home-manager,
-      nix-openclaw,
       ...
     }@inputs:
     {
@@ -36,8 +33,6 @@
             home-manager.useUserPackages = true;
             home-manager.extraSpecialArgs = { inherit inputs; };
             home-manager.users.aleroza = import ./home.nix;
-
-            home-manager.users.openclaw = import ./home-openclaw.nix;
           }
         ];
       };
