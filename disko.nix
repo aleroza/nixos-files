@@ -53,7 +53,7 @@
                         "discard=async"
                       ];
                     };
-                   "/log" = {
+                    "/log" = {
                       mountpoint = "/var/log";
                       mountOptions = [
                         "compress=zstd:1"
@@ -63,7 +63,12 @@
                     };
                     "/swap" = {
                       mountpoint = "/.swapvol";
-                      swap.swapfile.size = "8G";
+                      mountOptions = [
+                        "nodatacow"
+                        "noatime"
+                      ];
+                      swap.enable = true;
+                      swap.swapfile.size = "12G";
                     };
                   };
                 };

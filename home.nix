@@ -37,6 +37,35 @@
         ];
       };
       "org/gnome/desktop/interface".show-battery-percentage = true;
+
+      # Настройки переключения раскладки (Left Shift + Left Alt)
+      "org/gnome/desktop/input-sources" = {
+        xkb-options = [ "grp:alt_shift_toggle" ];
+      };
+
+      # Настройки питания и экрана
+      "org/gnome/settings-daemon/plugins/power" = {
+        # Отключение действий при бездействии при питании от сети (0 = никогда)
+        sleep-inactive-ac-timeout = 0;
+        # Время до действия при питании от батареи (15 минут = 900 сек)
+        sleep-inactive-battery-timeout = 900;
+        # Тип действия при питании от батареи - гибернация
+        sleep-inactive-battery-type = "hibernate";
+      };
+
+      # Время бездействия до активации хранителя (15 минут = 900 сек)
+      "org/gnome/desktop/session" = {
+        idle-delay = 900;
+      };
+
+      # Настройки хранителя экрана и блокировки
+      "org/gnome/screensaver" = {
+        # Включить блокировку при активации хранителя экрана
+        lock-enabled = true;
+        # Задержка блокировки после активации хранителя - 0 секунд (сразу)
+        lock-delay = 0;
+      };
+
       "org/gnome/shell/extensions/display-brightness-ddcutil" = {
         show-display-name = true;
         button-location = 1;

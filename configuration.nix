@@ -60,9 +60,18 @@
   services.desktopManager.gnome.enable = true;
   environment.gnome.excludePackages = with pkgs; [ epiphany ];
 
+  # Отключить переход в режимы сна/гибернации при закрытии крышки
+  # При закрытии крышки - только отключение экрана и блокировка
+  services.logind.settings.Login = {
+    HandleLidSwitch = "suspend-then-hibernate";
+    HandleLidSwitchExternalPower = "lock";
+    HandleLidSwitchDocked = "ignore";
+  };
+
   # Configure keymap in X11
   services.xserver.xkb.layout = "us,ru";
-  services.xserver.xkb.options = "grp:alt_shift_toggle,grp_led:scroll"; # Switch key
+  # Not working, need to use gnome-specific setting
+  # services.xserver.xkb.options = "grp:alt_shift_toggle,grp_led:scroll";
 
   # Enable CUPS to print documents.
   # services.printing.enable = true;
@@ -105,6 +114,7 @@
   };
 
   users.groups.openclaw = { };
+
   users.users.openclaw = {
     isNormalUser = true;
     home = "/home/openclaw";
@@ -120,9 +130,11 @@
   # List packages installed in system profile.
   # You can use https://search.nixos.org/ to find more packages (and options).
   environment.systemPackages = with pkgs; [
+    home-manager
     vim
     wget
     htop
+    parted
     ddcutil
 
     vscode
@@ -144,6 +156,10 @@
 
   # Enable the OpenSSH daemon.
   # services.openssh.enable = true;
+
+  swapDevices = [
+    { device = "/.swapvol/swapfile"; }
+  ];
 
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
