@@ -129,6 +129,8 @@
 
   # List packages installed in system profile.
   # You can use https://search.nixos.org/ to find more packages (and options).
+  virtualisation.docker.enable = true;
+
   environment.systemPackages = with pkgs; [
     home-manager
     vim
@@ -141,6 +143,7 @@
     flclash
     git
     telegram-desktop
+    docker-compose
     #rquickshare
   ];
 
