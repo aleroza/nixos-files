@@ -33,6 +33,7 @@
             home-manager.useUserPackages = true;
             home-manager.extraSpecialArgs = { inherit inputs; };
             home-manager.users.aleroza = import ./home.nix;
+            home-manager.users.openclaw = import ./home-openclaw.nix;
           }
         ];
       };
