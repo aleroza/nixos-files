@@ -108,9 +108,10 @@
     hashedPasswordFile = "./secrets/aleroza-password";
     isNormalUser = true;
     extraGroups = [
-      "wheel"
-      "i2c"
-    ]; # Enable ‘sudo’ for the user.
+      "wheel" # Enable ‘sudo’ for the user.
+      "docker" # Enable access to Docker.
+      "i2c" # Allow the user to control the brightness of the display.
+    ];
   };
 
   users.groups.openclaw = { };
@@ -120,6 +121,9 @@
     home = "/home/openclaw";
     createHome = true;
     group = "openclaw";
+    extraGroups = [
+      "docker" # Enable access to Docker.
+    ];
     linger = true;
     description = "OpenClaw service account";
   };
@@ -127,10 +131,11 @@
   nixpkgs.config.allowUnfree = true;
   programs.firefox.enable = true;
 
+  virtualisation.docker.enable = true;
+  virtualisation.docker.autoPrune.enable = true;
+
   # List packages installed in system profile.
   # You can use https://search.nixos.org/ to find more packages (and options).
-  virtualisation.docker.enable = true;
-
   environment.systemPackages = with pkgs; [
     home-manager
     vim
@@ -143,7 +148,6 @@
     flclash
     git
     telegram-desktop
-    docker-compose
     #rquickshare
   ];
 
