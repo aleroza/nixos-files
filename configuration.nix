@@ -145,6 +145,7 @@
     ddcutil
 
     vscode
+    gh
     flclash
     git
     telegram-desktop
