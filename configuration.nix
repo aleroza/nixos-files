@@ -117,7 +117,11 @@
   };
   services.fail2ban.enable = true;
 
-  users.groups.i2c = { };
+  users.groups = {
+    i2c = { };
+    openclaw = { };
+    plocate = { };
+  };
 
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.aleroza = {
@@ -127,10 +131,15 @@
       "wheel" # Enable ‘sudo’ for the user.
       "docker" # Enable access to Docker.
       "i2c" # Allow the user to control the brightness of the display.
+      "plocate"
     ];
   };
 
-  users.groups.openclaw = { };
+  environment.shellAliases = {
+    ll = "ls -l";
+    nix-rebuild = "sudo nixos-rebuild switch --flake .#aleroza-pc";
+    nix-gen = ''echo "Path: $(readlink /run/current-system)"; echo "  ID: $(readlink /nix/var/nix/profiles/system)"'';
+  };
 
   users.users.openclaw = {
     isNormalUser = true;
@@ -161,6 +170,10 @@
     parted
     ddcutil
     fastfetch
+
+    fd
+    plocate
+    fzf
 
     gnomeExtensions.appindicator
     vscode
