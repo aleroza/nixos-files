@@ -22,8 +22,8 @@
   home.packages = with pkgs; [
     nodejs-slim_24
     pnpm
+    gh
     nixfmt
-    anytype
   ];
 
   # # Включение openclaw-gateway для запуска при старте системы

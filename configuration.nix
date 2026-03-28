@@ -32,6 +32,10 @@
     KERNEL=="i2c-[0-9]*", GROUP="i2c", MODE="0660"
   '';
 
+  swapDevices = [
+    { device = "/.swapvol/swapfile"; }
+  ];
+
   networking.hostName = "aleroza-pc"; # Define your hostname.
 
   # Configure network connections interactively with nmcli or nmtui.
@@ -59,6 +63,10 @@
   services.displayManager.gdm.enable = true;
   services.desktopManager.gnome.enable = true;
   environment.gnome.excludePackages = with pkgs; [ epiphany ];
+
+  # We are using dick encryption so skipping DM ligin
+  services.displayManager.autoLogin.enable = true;
+  services.displayManager.autoLogin.user = "aleroza";
 
   # Отключить переход в режимы сна/гибернации при закрытии крышки
   # При закрытии крышки - только отключение экрана и блокировка
@@ -101,6 +109,14 @@
   # Enable touchpad support (enabled default in most desktopManager).
   services.libinput.enable = true;
 
+  services.openssh = {
+    enable = true;
+    settings = {
+      PermitRootLogin = "no";
+    };
+  };
+  services.fail2ban.enable = true;
+
   users.groups.i2c = { };
 
   # Define a user account. Don't forget to set a password with ‘passwd’.
@@ -129,6 +145,7 @@
   };
 
   nixpkgs.config.allowUnfree = true;
+
   programs.firefox.enable = true;
 
   virtualisation.docker.enable = true;
@@ -143,7 +160,9 @@
     htop
     parted
     ddcutil
+    fastfetch
 
+    gnomeExtensions.appindicator
     vscode
     gh
     flclash
@@ -161,13 +180,6 @@
   # };
 
   # List services that you want to enable:
-
-  # Enable the OpenSSH daemon.
-  # services.openssh.enable = true;
-
-  swapDevices = [
-    { device = "/.swapvol/swapfile"; }
-  ];
 
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
