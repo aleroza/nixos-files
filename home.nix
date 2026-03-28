@@ -1,4 +1,9 @@
-{ config, pkgs, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
 
 {
   home.username = "aleroza";
@@ -30,8 +35,17 @@
     enable = true;
     settings = {
       "org/gnome/shell" = {
+        favorite-apps = [
+          "google-chrome.desktop"
+          "org.telegram.desktop.desktop"
+          "code.desktop"
+          "org.gnome.Console.desktop"
+          "org.gnome.Nautilus.desktop"
+        ];
+
         # `gnome-extensions list` for a list
         enabled-extensions = [
+          "appindicatorsupport@rgcjonas.gmail.com"
           "clipboard-indicator@tudmotu.com"
           "display-brightness-ddcutil@themightydeity.github.com"
         ];
@@ -45,17 +59,17 @@
 
       # Настройки питания и экрана
       "org/gnome/settings-daemon/plugins/power" = {
-        # Отключение действий при бездействии при питании от сети (0 = никогда)
+        # Отключение действий при бездействии при питании от сети
+        sleep-inactive-ac-type = "nothing";
         sleep-inactive-ac-timeout = 0;
-        # Время до действия при питании от батареи (15 минут = 900 сек)
-        sleep-inactive-battery-timeout = 900;
-        # Тип действия при питании от батареи - гибернация
+        # Время до действия при питании от батареи -- гибернация через 15 минут (900 сек)
         sleep-inactive-battery-type = "hibernate";
+        sleep-inactive-battery-timeout = 900;
       };
 
-      # Время бездействия до активации хранителя (15 минут = 900 сек)
+      # Время бездействия до активации хранителя через 12 минут (720 сек)
       "org/gnome/desktop/session" = {
-        idle-delay = 900;
+        idle-delay = lib.hm.gvariant.mkUint32 720;
       };
 
       # Настройки хранителя экрана и блокировки
