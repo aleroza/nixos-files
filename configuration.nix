@@ -28,6 +28,10 @@
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
   boot.kernelModules = [ "i2c-dev" ];
+
+  # Workaround for AMD HDMI monitor spurious wake from DPMS sleep
+  boot.kernelParams = [ "amdgpu.dc=0" ];
+
   services.udev.extraRules = ''
     KERNEL=="i2c-[0-9]*", GROUP="i2c", MODE="0660"
   '';
