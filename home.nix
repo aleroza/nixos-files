@@ -9,6 +9,20 @@
   home.username = "aleroza";
   home.homeDirectory = "/home/aleroza";
 
+  # Похоже не требуется
+  # home.sessionVariables = {
+  #   XDG_DATA_DIRS = "@{XDG_DATA_DIRS}:/var/lib/flatpak/exports/share:$HOME/.local/share/flatpak/exports/share";
+  # };
+
+  # Bash history settings
+  programs.bash.initExtra = ''
+    # History settings
+    export HISTCONTROL=ignoredups:erasedups
+    export HISTIGNORE=" *"
+    export HISTSIZE=10000
+    export HISTFILESIZE=20000
+  '';
+
   # Управление конфигами программ (dotfiles)
   programs.git = {
     enable = true;
@@ -18,11 +32,34 @@
     };
   };
 
+  # Git aliases через shellAliases
+  programs.bash.shellAliases = {
+    gs = "git status";
+    ga = "git add";
+    gc = "git commit";
+    gp = "git push";
+    gl = "git log --oneline -10";
+    gd = "git diff";
+    gco = "git checkout";
+    gb = "git branch";
+    gst = "git status";
+  };
+
   # Это важно для совместимости
   home.stateVersion = "25.11";
 
   # Автоматическое управление установкой через home-manager
   programs.home-manager.enable = true;
+
+  home.activation = {
+    setupFlatpak = ''
+      ${pkgs.flatpak}/bin/flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    '';
+    installBottles = lib.hm.dag.entryAfter [ "setupFlatpak" ] ''
+      ${pkgs.flatpak}/bin/flatpak --user install --noninteractive flathub com.usebottles.bottles
+      ${pkgs.flatpak}/bin/flatpak override --user com.usebottles.bottles --filesystem=xdg-data/Steam --share=network
+    '';
+  };
 
   home.packages = with pkgs; [
     google-chrome
@@ -31,9 +68,29 @@
     gnomeExtensions.clipboard-indicator
     gnomeExtensions.brightness-control-using-ddcutil
   ];
+
   dconf = {
     enable = true;
     settings = {
+      # Custom shortcuts
+      "org/gnome/settings-daemon/plugins/media-keys" = {
+        custom-keybindings = [
+          "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/open-console/"
+          # "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/"
+        ];
+      };
+      "org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/open-console" = {
+        name = "Open Console";
+        command = "kgx";
+        binding = "<Control><Alt>t";
+      };
+      # "org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1" = {
+      #   name = "111";
+      #   command = "echo \"1\"";
+      #   binding = "<Control><Alt>1";
+      # };
+
+      # Apps pinned to Dash-panel
       "org/gnome/shell" = {
         favorite-apps = [
           "google-chrome.desktop"
@@ -43,16 +100,18 @@
           "org.gnome.Nautilus.desktop"
         ];
 
-        # `gnome-extensions list` for a list
+        # Enabled extensions (user `gnome-extensions list` for full extension name)
         enabled-extensions = [
           "appindicatorsupport@rgcjonas.gmail.com"
           "clipboard-indicator@tudmotu.com"
           "display-brightness-ddcutil@themightydeity.github.com"
         ];
       };
+
+      # Show battery percentage in the top bar
       "org/gnome/desktop/interface".show-battery-percentage = true;
 
-      # Настройки переключения раскладки (Left Shift + Left Alt)
+      # Keyboard layout switching command
       "org/gnome/desktop/input-sources" = {
         xkb-options = [ "grp:alt_shift_toggle" ];
       };
@@ -80,13 +139,25 @@
         lock-delay = 0;
       };
 
+      # Monitor brightness control extension
       "org/gnome/shell/extensions/display-brightness-ddcutil" = {
-        show-display-name = true;
-        button-location = 1;
+        show-display-name = true; # Show name of monitor
+        button-location = 1; # Show brightness control in the main menu
+      };
+      # Clipboard history extension
+      "org/gnome/shell/extensions/clipboard-indicator" = {
+        display-mode = 2; # Show clipboard content and icon
+        topbar-preview-size = 15; # Preview size
+      };
+
+      "org/gnome/desktop/wm/preferences" = {
+        button-layout = "appmenu:minimize,maximize,close";
+        action-middle-click-titlebar = "minimize";
       };
     };
   };
 
+  # App/links associations
   xdg.mimeApps.enable = true;
   xdg.configFile."mimeapps.list".force = true;
   xdg.mimeApps.defaultApplications = {
@@ -97,6 +168,7 @@
     "x-scheme-handler/unknown" = "google-chrome.desktop";
   };
 
+  # Default monitor layout
   home.file.".config/monitors.xml" = {
     force = true;
     text = ''
