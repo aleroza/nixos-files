@@ -1,4 +1,9 @@
-{ lib, ... }:
+# Docker module
+{ config, lib, ... }:
+
 {
-  # Docker placeholder
+  config.virtualisation.docker = {
+    enable = true;
+    autoPrune.enable = true;
+  };
 }

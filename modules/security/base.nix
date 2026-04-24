@@ -1,4 +1,6 @@
-{ lib, ... }:
+# Security base module
+{ config, lib, ... }:
+
 {
-  # Security base placeholder
+  config.services.fail2ban.enable = true;
 }
