@@ -1,4 +1,11 @@
-{ lib, ... }:
+# SSH server module
+{ config, lib, ... }:
+
 {
-  # SSH module placeholder
+  config.services.openssh = {
+    enable = true;
+    settings = {
+      PermitRootLogin = "no";
+    };
+  };
 }
