@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Shell aliases placeholder
+}

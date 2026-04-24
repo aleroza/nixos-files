@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Users base placeholder
+}

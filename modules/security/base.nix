@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Security base placeholder
+}

@@ -19,10 +19,15 @@
       home-manager,
       ...
     }@inputs:
+    let
+      base = /home/openclaw/.openclaw/workspace/nixos-files;
+    in
     {
       nixosConfigurations."aleroza-pc" = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
-        specialArgs = { inherit inputs; };
+        specialArgs = {
+          inherit inputs;
+        };
         modules = [
           ./hardware-configuration.nix
           ./configuration.nix
@@ -31,7 +36,9 @@
           {
             home-manager.useGlobalPkgs = true;
             home-manager.useUserPackages = true;
-            home-manager.extraSpecialArgs = { inherit inputs; };
+            home-manager.extraSpecialArgs = {
+              inherit inputs;
+            };
             home-manager.users.aleroza = import ./home.nix;
             home-manager.users.openclaw = import ./home-openclaw.nix;
           }

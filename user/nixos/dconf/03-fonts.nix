@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Fonts placeholder
+}

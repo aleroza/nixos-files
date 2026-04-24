@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Allowlist placeholder
+}

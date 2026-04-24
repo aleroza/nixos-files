@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # CLI apps placeholder
+}

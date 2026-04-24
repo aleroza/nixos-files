@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Libinput placeholder
+}

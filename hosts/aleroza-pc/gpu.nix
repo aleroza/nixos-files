@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # GPU placeholder
+}

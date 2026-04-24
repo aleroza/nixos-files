@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Apps placeholder
+}

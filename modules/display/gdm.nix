@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # GDM module placeholder
+}

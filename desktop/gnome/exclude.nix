@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # GNOME exclude placeholder
+}

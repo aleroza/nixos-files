@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Shell env placeholder
+}

@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Docker placeholder
+}
