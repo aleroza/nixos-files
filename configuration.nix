@@ -20,41 +20,42 @@
     "flakes"
   ];
 
-  # Use the systemd-boot EFI boot loader.
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
+  # === MIGRATED TO modules/core/base.nix ===
+  # boot.loader.systemd-boot.enable = true;
+  # boot.loader.efi.canTouchEfiVariables = true;
+  # boot.kernelPackages = pkgs.linuxPackages_latest;
+  # boot.kernelModules = [ "i2c-dev" ];
+  # services.udev.extraRules = ''KERNEL=="i2c-[0-9]*", GROUP="i2c", MODE="0660"'';
+  # swapDevices = [ { device = "/.swapvol/swapfile"; } ];
 
-  # Use latest kernel.
-  boot.kernelPackages = pkgs.linuxPackages_latest;
+  # === MIGRATED TO modules/networking/base.nix ===
+  # networking.hostName = "aleroza-pc";
+  # networking.networkmanager.enable = true;
+  # time.timeZone = "Europe/Moscow";
 
-  boot.kernelModules = [ "i2c-dev" ];
-  services.udev.extraRules = ''
-    KERNEL=="i2c-[0-9]*", GROUP="i2c", MODE="0660"
-  '';
+  # === MIGRATED TO modules/audio/base.nix ===
+  # services.pipewire = { enable = true; alsa.enable = true; alsa.support32Bit = true; pulse.enable = true; wireplumber.enable = true; };
 
-  swapDevices = [
-    { device = "/.swapvol/swapfile"; }
-  ];
+  # === MIGRATED TO modules/audio/bluetooth.nix ===
+  # hardware.bluetooth = { enable = true; powerOnBoot = true; settings = { General = { Enable = "Source,Sink,Media,Socket"; Experimental = true; }; }; };
 
-  networking.hostName = "aleroza-pc"; # Define your hostname.
+  # === MIGRATED TO modules/input/libinput.nix ===
+  # services.libinput.enable = true;
 
-  # Configure network connections interactively with nmcli or nmtui.
-  networking.networkmanager.enable = true;
+  # === MIGRATED TO modules/networking/ssh.nix ===
+  # services.openssh = { enable = true; settings = { PermitRootLogin = "no"; }; };
+  # services.fail2ban.enable = true; # in modules/security/base.nix
 
-  # Set your time zone.
-  time.timeZone = "Europe/Moscow";
+  # === MIGRATED TO modules/users/groups.nix ===
+  # users.groups = { i2c = { }; openclaw = { }; plocate = { }; };
 
-  # Configure network proxy if necessary
-  # networking.proxy.default = "http://user:password@proxy:port/";
-  # networking.proxy.noProxy = "127.0.0.1,localhost,internal.domain";
+  # === MIGRATED TO modules/virtualization/docker.nix ===
+  # virtualisation.docker = { enable = true; autoPrune.enable = true; };
 
-  # Select internationalisation properties.
-  # i18n.defaultLocale = "en_US.UTF-8";
-  # console = {
-  #   font = "Lat2-Terminus16";
-  #   keyMap = "us";
-  #   useXkbConfig = true; # use xkb.options in tty.
-  # };
+  # === MIGRATED TO modules/packages/ ===
+  # environment.systemPackages with base, dev-tools, apps - see modules/packages/
+
+  # === REMAINING (NOT MIGRATED YET) ===
 
   # Enable the X11 windowing system.
   services.xserver.enable = true;
@@ -64,12 +65,11 @@
   services.desktopManager.gnome.enable = true;
   environment.gnome.excludePackages = with pkgs; [ epiphany ];
 
-  # We are using dick encryption so skipping DM ligin
+  # We are using disk encryption so skipping DM login
   services.displayManager.autoLogin.enable = true;
   services.displayManager.autoLogin.user = "aleroza";
 
-  # Отключить переход в режимы сна/гибернации при закрытии крышки
-  # При закрытии крышки - только отключение экрана и блокировка
+  # Disable lid switch sleep/hibernate - only turn off screen and lock
   services.logind.settings.Login = {
     HandleLidSwitch = "suspend-then-hibernate";
     HandleLidSwitchExternalPower = "lock";
@@ -78,15 +78,8 @@
 
   # Configure keymap in X11
   services.xserver.xkb.layout = "us,ru";
-  # Not working, need to use gnome-specific setting
-  # services.xserver.xkb.options = "grp:alt_shift_toggle,grp_led:scroll";
-
-  # Enable CUPS to print documents.
-  # services.printing.enable = true;
 
   # Enable sound.
-  # services.pulseaudio.enable = true;
-  # OR
   services.pipewire = {
     enable = true;
     alsa.enable = true;
@@ -95,6 +88,7 @@
     wireplumber.enable = true;
   };
 
+  # Enable Bluetooth
   hardware.bluetooth = {
     enable = true;
     powerOnBoot = true;
@@ -106,7 +100,7 @@
     };
   };
 
-  # Enable touchpad support (enabled default in most desktopManager).
+  # Enable touchpad support
   services.libinput.enable = true;
 
   services.openssh = {
@@ -117,20 +111,22 @@
   };
   services.fail2ban.enable = true;
 
+  # === REMAINING IN CONFIGURATION (not yet migrated) ===
+
   users.groups = {
     i2c = { };
     openclaw = { };
     plocate = { };
   };
 
-  # Define a user account. Don't forget to set a password with ‘passwd’.
+  # User accounts (not migrated)
   users.users.aleroza = {
     hashedPasswordFile = "./secrets/aleroza-password";
     isNormalUser = true;
     extraGroups = [
-      "wheel" # Enable ‘sudo’ for the user.
-      "docker" # Enable access to Docker.
-      "i2c" # Allow the user to control the brightness of the display.
+      "wheel"
+      "docker"
+      "i2c"
       "plocate"
     ];
   };
@@ -147,7 +143,7 @@
     createHome = true;
     group = "openclaw";
     extraGroups = [
-      "docker" # Enable access to Docker.
+      "docker"
     ];
     linger = true;
     description = "OpenClaw service account";
@@ -157,9 +153,9 @@
 
   programs.steam = {
     enable = true;
-    remotePlay.openFirewall = true; # Open ports in the firewall for Steam Remote Play
-    dedicatedServer.openFirewall = true; # Open ports in the firewall for Source Dedicated Server
-    localNetworkGameTransfers.openFirewall = true; # Open ports in the firewall for Steam Local Network Game Transfers
+    remotePlay.openFirewall = true;
+    dedicatedServer.openFirewall = true;
+    localNetworkGameTransfers.openFirewall = true;
   };
 
   programs.firefox.enable = true;
@@ -176,8 +172,7 @@
   virtualisation.docker.enable = true;
   virtualisation.docker.autoPrune.enable = true;
 
-  # List packages installed in system profile.
-  # You can use https://search.nixos.org/ to find more packages (and options).
+  # Base system packages
   environment.systemPackages = with pkgs; [
     home-manager
     usbutils
@@ -200,14 +195,15 @@
     plocate
     fzf
 
+    gh
+    nixfmt
+
     gnome-tweaks
     gnomeExtensions.appindicator
     vscode
-    gh
+    telegram-desktop
     flclash
     git
-    telegram-desktop
-    #rquickshare
 
     protonup-qt
     heroic
