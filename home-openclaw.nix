@@ -1,8 +1,8 @@
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 {
   home.username = "openclaw";
-  home.homeDirectory = "/home/openclaw";
+  home.homeDirectory = lib.mkForce "/home/openclaw";
 
   # Управление конфигами программ (dotfiles)
   programs.git = {

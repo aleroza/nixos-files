@@ -7,7 +7,7 @@
 
 {
   home.username = "aleroza";
-  home.homeDirectory = "/home/aleroza";
+  home.homeDirectory = lib.mkForce "/home/aleroza";
 
   # Похоже не требуется
   # home.sessionVariables = {
