@@ -1,4 +1,10 @@
-{ lib, ... }:
+# Dev tools packages
+{ config, lib, pkgs, ... }:
+
 {
-  # Dev tools placeholder
+  config = {
+    environment.systemPackages = with pkgs; [
+      nixfmt
+    ];
+  };
 }
