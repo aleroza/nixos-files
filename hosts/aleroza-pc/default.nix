@@ -33,7 +33,7 @@
     ../../desktop/gnome/default.nix
 
     # Legacy configuration (unmigrated sections remain here)
-    ../../configuration.nix
+    # NOTE: configuration.nix removed to avoid circular import
   ];
 
   # Machine-specific configuration
@@ -43,5 +43,11 @@
     # Boot loader
     boot.loader.systemd-boot.enable = true;
     boot.loader.efi.canTouchEfiVariables = true;
+
+    # Allow unfree packages (google-chrome, steam, etc.)
+    nixpkgs.config.allowUnfree = true;
+
+    # Required: state version
+    system.stateVersion = "25.11";
   };
 }
