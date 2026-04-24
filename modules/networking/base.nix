@@ -1,4 +1,10 @@
-{ lib, ... }:
+# Networking base module
+{ config, lib, ... }:
+
 {
-  # Networking base placeholder
+  config = {
+    networking.hostName = "aleroza-pc";
+    networking.networkmanager.enable = true;
+    time.timeZone = "Europe/Moscow";
+  };
 }
