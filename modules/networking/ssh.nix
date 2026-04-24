@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # SSH module placeholder
+}

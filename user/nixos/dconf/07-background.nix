@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Background placeholder
+}

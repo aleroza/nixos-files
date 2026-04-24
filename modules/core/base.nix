@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Core module placeholder
+}

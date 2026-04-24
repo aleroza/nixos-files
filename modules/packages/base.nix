@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Packages base placeholder
+}

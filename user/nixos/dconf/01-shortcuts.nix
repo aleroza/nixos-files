@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Shortcuts placeholder
+}

@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Home openclaw placeholder
+}

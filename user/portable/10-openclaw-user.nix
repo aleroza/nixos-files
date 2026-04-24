@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # OpenClaw user placeholder
+}

@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Host default placeholder
+}

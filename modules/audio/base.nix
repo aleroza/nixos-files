@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Audio base placeholder
+}

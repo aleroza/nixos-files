@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Monitors placeholder
+}

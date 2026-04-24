@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Dev tools placeholder
+}

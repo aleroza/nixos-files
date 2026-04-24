@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Keyboard placeholder
+}

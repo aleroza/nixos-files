@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Nix module placeholder
+}

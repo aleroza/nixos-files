@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Networking base placeholder
+}

@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # Theme placeholder
+}
