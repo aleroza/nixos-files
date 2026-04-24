@@ -1,4 +1,0 @@
-{ lib, ... }:
-{
-  # Applications placeholder
-}

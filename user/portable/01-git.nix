@@ -1,4 +1,0 @@
-{ lib, ... }:
-{
-  # Git config placeholder
-}

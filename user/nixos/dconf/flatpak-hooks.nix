@@ -1,4 +1,0 @@
-{ lib, ... }:
-{
-  # Flatpak hooks placeholder
-}
