@@ -1,4 +1,8 @@
-{ lib, ... }:
+{ config, lib, pkgs, ... }:
+
 {
-  # GNOME core placeholder
+  config = {
+    services.desktopManager.gnome.enable = true;
+    environment.gnome.excludePackages = with pkgs; [ epiphany ];
+  };
 }

@@ -1,4 +1,8 @@
-{ lib, ... }:
+{ config, lib, pkgs, ... }:
+
 {
-  # X11 placeholder
+  config = {
+    services.xserver.enable = true;
+    services.xserver.xkb.layout = "us,ru";
+  };
 }

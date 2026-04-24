@@ -1,4 +1,10 @@
-{ lib, ... }:
+{ lib, config, pkgs, ... }:
+
 {
-  # GNOME default placeholder
+  imports = [
+    ./core.nix
+    ./apps.nix
+    ./extensions.nix
+    ./exclude.nix
+  ];
 }
