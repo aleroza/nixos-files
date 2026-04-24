@@ -1,4 +1,8 @@
-{ lib, ... }:
+# Users base module (stub)
+{ config, lib, ... }:
+
 {
-  # Users base placeholder
+  options = { };
+
+  config = { };
 }

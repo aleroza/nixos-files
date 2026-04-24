@@ -1,4 +1,6 @@
-{ lib, ... }:
+# Libinput module
+{ config, lib, ... }:
+
 {
-  # Libinput placeholder
+  config.services.libinput.enable = true;
 }
