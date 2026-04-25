@@ -1,0 +1,4 @@
+{ lib, ... }:
+{
+  # None desktop placeholder
+}

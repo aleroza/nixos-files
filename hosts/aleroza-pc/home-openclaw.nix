@@ -1,10 +1,14 @@
-{ config, pkgs, lib, ... }:
+{ inputs ? { }, lib ? null, pkgs ? null, config ? null, ... }:
 
 {
   home.username = "openclaw";
-  home.homeDirectory = lib.mkForce "/home/openclaw";
+  home.homeDirectory = "/home/openclaw";
+  home.stateVersion = "25.11";
 
-  # Управление конфигами программ (dotfiles)
+  imports = [
+    ../../modules/user/portable/04-defaults.nix
+  ];
+
   programs.git = {
     enable = true;
     settings = {
@@ -13,12 +17,6 @@
     };
   };
 
-  # Это важно для совместимости
-  home.stateVersion = "25.11";
-
-  # Автоматическое управление установкой через home-manager
-  programs.home-manager.enable = true;
-
   home.packages = with pkgs; [
     nodejs-slim_24
     pnpm
@@ -26,14 +24,6 @@
     nixfmt
   ];
 
-  # # Включение openclaw-gateway для запуска при старте системы
-  # # не работает
-  # systemd.user.services.openclaw-gateway = {
-  #   enable = true;
-  #   wantedBy = [ "default.target" ];
-  # };
-
-  # pnpm setup
   home.sessionVariables = {
     PNPM_HOME = "$HOME/.local/share/pnpm";
     XDG_RUNTIME_DIR = "/run/user/$(id -u)";
