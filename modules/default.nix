@@ -2,9 +2,13 @@
 
 {
   imports = [
+    ./base.nix
+    ./desktop.nix
     ./development.nix
     ./gaming.nix
-    ./desktop.nix
     ./docker.nix
+    ./hardware.nix
+    ./security.nix
+    ./flatpak.nix
   ];
 }

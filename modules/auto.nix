@@ -1,28 +1,8 @@
 { config, lib, ... }: let
   inherit (lib) types mkOption;
 in {
-  # ▸ auto — единая точка конфигурации хоста
-  #
-  #   auto = {
-  #     # Feature toggles (бывшие tags)
-  #     development = true;
-  #     desktop     = true;
-  #     gaming      = false;
-  #
-  #     # Модули со своей структурой
-  #     docker.enable = true;
-  #     docker.users  = [ "aleroza" "openclaw" ];
-  #
-  #     # Home-manager users
-  #     hmUsers = [ "alex" ];
-  #   };
-  #
-  # Модули проверяют config.auto.<feature> и сами гейтятся.
-  # Всё в одном пространстве — никакой магии.
-
   options.auto = {
-    # ▸ Feature toggles (плоские булевы, как были tags)
-
+    # ▸ Feature toggles
     development = mkOption {
       type = types.bool;
       default = false;
@@ -38,7 +18,7 @@ in {
     desktop = mkOption {
       type = types.bool;
       default = false;
-      description = "Enable desktop environment (KDE Plasma).";
+      description = "Enable desktop environment.";
     };
 
     server = mkOption {
@@ -47,13 +27,19 @@ in {
       description = "Enable server configuration.";
     };
 
+    # ▸ Desktop environment selection
+    desktopType = mkOption {
+      type = types.enum [ "gnome" "kde" "hyprland" "none" ];
+      default = "none";
+      description = "Which desktop environment to use (only applies when auto.desktop = true).";
+    };
+
     # ▸ Docker
     docker = {
       enable = mkOption {
         type = types.bool;
         default = false;
         description = "Enable Docker daemon.";
-
       };
 
       users = mkOption {
@@ -61,6 +47,34 @@ in {
         default = [];
         description = "Users to add to the docker group.";
       };
+    };
+
+    # ▸ Bluetooth
+    bluetooth = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable Bluetooth support.";
+    };
+
+    # ▸ Flatpak
+    flatpak = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable Flatpak (flathub) support.";
+    };
+
+    # ▸ SSH server
+    ssh = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable OpenSSH server.";
+    };
+
+    # ▸ Fail2ban
+    fail2ban = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable fail2ban.";
     };
 
     # ▸ Home-manager users

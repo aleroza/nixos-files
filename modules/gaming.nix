@@ -1,17 +1,21 @@
 { config, lib, pkgs, ... }:
 
 # ▸ Включится только если auto.gaming = true
+#   Набор соответствует конфигурации aleroza-pc
 
 lib.mkIf config.auto.gaming {
 
-  environment.systemPackages = with pkgs; [
-    steam
-    lutris
-    mangohud
-    gamemode
-  ];
+  programs.steam = {
+    enable = true;
+    remotePlay.openFirewall = true;
+    dedicatedServer.openFirewall = true;
+    localNetworkGameTransfers.openFirewall = true;
+  };
 
-  programs.gamemode.enable = true;
+  environment.systemPackages = with pkgs; [
+    protonup-qt
+    heroic
+  ];
 
   hardware.graphics = {
     enable = true;
