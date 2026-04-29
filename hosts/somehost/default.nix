@@ -14,20 +14,20 @@
 
     docker = {
       enable = true;
-      users  = [ "aleroza" "openclaw" ];
+      users  = [ "testuser" ];
     };
 
     hmUsers = [ "testuser" ];
   };
 
   # ▸ Пользователи (для docker.users + hmUsers)
-  users.users = lib.genAttrs [ "aleroza" "openclaw" "testuser" ] (name: {
+  users.users = lib.genAttrs [ "testuser" ] (name: {
     isNormalUser = true;
     description = "Template user ${name}";
     group = name;
   });
 
-  users.groups = lib.genAttrs [ "aleroza" "openclaw" "testuser" ] (name: {});
+  users.groups = lib.genAttrs [ "testuser" ] (name: {});
 
   # А вот так — просто добавить новую фичу:
   # auto.office = true;
