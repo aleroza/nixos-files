@@ -54,7 +54,7 @@
 
   # ▸ Пользователь aleroza
   users.users.aleroza = {
-    hashedPasswordFile = ./secrets/aleroza-password;
+    hashedPasswordFile = "/etc/nixos/secrets/aleroza-password";
     isNormalUser = true;
     extraGroups = [
       "wheel"
