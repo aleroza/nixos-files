@@ -52,6 +52,9 @@
     hmUsers = [ "aleroza" "openclaw" ];
   };
 
+  # ▸ Display manager override (DE модули ставят user = "", перебиваем тут)
+  services.displayManager.autoLogin.user = lib.mkForce "aleroza";
+
   # ▸ Группы
   users.groups = {
     openclaw = { };
