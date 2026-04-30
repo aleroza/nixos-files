@@ -9,8 +9,12 @@
   auto = {
     development = true;
     gaming      = true;
-    desktop     = true;
-    server      = false;
+
+    xserver.enable = true;
+    sound.enable   = true;
+    input.enable   = true;
+    programs.enable = true;
+    server       = false;
 
     docker = {
       enable = true;
@@ -30,8 +34,8 @@
   users.groups = lib.genAttrs [ "testuser" ] (name: {});
 
   # А вот так — просто добавить новую фичу:
-  # auto.office = true;
-  # auto.media  = false;
+  # auto.office.enable = true;
+  # auto.media.enable  = false;
 
   # Можно переопределить что угодно поверх модулей
   environment.systemPackages = with pkgs; [
