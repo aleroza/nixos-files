@@ -11,6 +11,7 @@ lib.mkIf cfg.enable {
 
   virtualisation.docker.enable = true;
   virtualisation.docker.autoPrune.enable = true;
+  virtualisation.docker.autoPrune.dates = [ "monthly" ];
 
   users.users = lib.genAttrs cfg.users (name: {
     extraGroups = [ "docker" ];
