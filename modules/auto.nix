@@ -15,23 +15,91 @@ in {
       description = "Enable gaming tools (Steam, Lutris, MangoHud).";
     };
 
-    desktop = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable desktop environment.";
-    };
-
     server = mkOption {
       type = types.bool;
       default = false;
       description = "Enable server configuration.";
     };
 
-    # ▸ Desktop environment selection
-    desktopType = mkOption {
-      type = types.enum [ "gnome" "kde" "hyprland" "none" ];
-      default = "none";
-      description = "Which desktop environment to use (only applies when auto.desktop = true).";
+    # ▸ Desktop environments (individual toggles, any combination allowed)
+    xserver = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable X11 windowing system.";
+      };
+    };
+
+    gnome = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable GNOME desktop environment.";
+      };
+    };
+
+    kde = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable KDE Plasma desktop environment.";
+      };
+    };
+
+    hyprland = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable Hyprland compositor.";
+      };
+    };
+
+    displayManager = {
+      autoLogin = {
+        enable = mkOption {
+          type = types.bool;
+          default = false;
+          description = "Enable auto-login on display manager.";
+        };
+
+        user = mkOption {
+          type = types.str;
+          default = "aleroza";
+          description = "User to auto-login as.";
+        };
+      };
+    };
+
+    power = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable power management (logind).";
+      };
+    };
+
+    sound = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable sound (PipeWire).";
+      };
+    };
+
+    input = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable touchpad / libinput.";
+      };
+    };
+
+    programs = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable common desktop programs (Firefox, etc.).";
+      };
     };
 
     # ▸ Docker

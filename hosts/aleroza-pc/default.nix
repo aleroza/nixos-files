@@ -29,8 +29,15 @@
   auto = {
     development = true;
     gaming      = true;
-    desktop     = true;
-    desktopType = "gnome";
+
+    xserver.enable            = true;
+    gnome.enable              = true;
+    displayManager.autoLogin.enable = true;
+    sound.enable              = true;
+    power.enable              = true;
+    input.enable              = true;
+    programs.enable           = true;
+
     server      = false;
 
     bluetooth = true;
