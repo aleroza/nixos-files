@@ -32,7 +32,6 @@
 
     xserver.enable            = true;
     gnome.enable              = true;
-    displayManager.autoLogin.enable = true;
     sound.enable              = true;
     power.enable              = true;
     input.enable              = true;
