@@ -4,7 +4,6 @@
   imports = [
     ./base.nix
     ./xserver.nix
-    ./display-manager.nix
     ./gnome.nix
     ./kde.nix
     ./hyprland.nix

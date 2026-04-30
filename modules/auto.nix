@@ -54,21 +54,6 @@ in {
       };
     };
 
-    displayManager = {
-      autoLogin = {
-        enable = mkOption {
-          type = types.bool;
-          default = false;
-          description = "Enable auto-login on display manager.";
-        };
-
-        user = mkOption {
-          type = types.str;
-          default = "aleroza";
-          description = "User to auto-login as.";
-        };
-      };
-    };
 
     power = {
       enable = mkOption {
