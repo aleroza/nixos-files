@@ -1,6 +1,8 @@
-{ config, lib, ... }: let
+{ config, lib, ... }:
+let
   inherit (lib) types mkOption;
-in {
+in
+{
   options.auto = {
     # ▸ Feature toggles
     development = mkOption {
@@ -18,7 +20,13 @@ in {
     server = mkOption {
       type = types.bool;
       default = false;
-      description = "Enable server configuration.";
+      description = "Enable server profile. Convenience preset that enables ssh + fail2ban via mkDefault.";
+    };
+
+    desktop = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable desktop profile. Convenience preset that enables server + input + sound + programs + bluetooth via mkDefault.";
     };
 
     # ▸ Desktop environments (individual toggles, any combination allowed)
@@ -54,6 +62,13 @@ in {
       };
     };
 
+    laptop = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable laptop lid behavior (suspend/lock on lid close).";
+      };
+    };
 
     power = {
       enable = mkOption {
@@ -97,7 +112,7 @@ in {
 
       users = mkOption {
         type = types.listOf types.str;
-        default = [];
+        default = lib.lists.optional (config.auto.mainUser != "") config.auto.mainUser;
         description = "Users to add to the docker group.";
       };
     };
@@ -133,8 +148,15 @@ in {
     # ▸ Home-manager users
     hmUsers = mkOption {
       type = types.listOf types.str;
-      default = [];
+      default = [ ];
       description = "Users configured via home-manager.";
+    };
+
+    # ▸ Main system user
+    mainUser = mkOption {
+      type = types.str;
+      default = "";
+      description = "Primary system user. Auto-filled into module user-lists like docker.users or display-brightness-ddcutil.users.";
     };
   };
 }

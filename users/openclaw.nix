@@ -1,4 +1,9 @@
-{ config, pkgs, lib, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
 
 # ▸ Home-manager config для пользователя openclaw
 #   Портабельный — не зависит от NixOS-специфичных опций
@@ -32,6 +37,7 @@
   home.activation = {
     ensureOpenclawDepsPackageJson = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       npm install -g openclaw@latest @tobilu/qmd
+      npm install -g global-agent
     '';
   };
 

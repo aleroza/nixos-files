@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # ▸ Основная настройка хоста
@@ -27,29 +32,32 @@
 
   # ▸ auto — конфигурация этого хоста
   auto = {
+    mainUser = "aleroza";
     development = true;
-    gaming      = true;
+    gaming = true;
+    desktop = true;
 
-    xserver.enable            = true;
-    gnome.enable              = true;
-    sound.enable              = true;
-    power.enable              = true;
-    input.enable              = true;
-    programs.enable           = true;
+    xserver.enable = true;
+    gnome = {
+      enable = true;
+      extensions = {
+        display-brightness-ddcutil.enable = true;
+        appindicator.enable = true;
+        clipboard-indicator.enable = true;
+      };
+    };
 
-    server      = false;
-
-    bluetooth = true;
-    flatpak   = true;
-    ssh       = true;
-    fail2ban  = true;
+    flatpak = true;
 
     docker = {
       enable = true;
-      users  = [ "aleroza" "openclaw" ];
+      users = [ "openclaw" ];
     };
 
-    hmUsers = [ "aleroza" "openclaw" ];
+    hmUsers = [
+      "aleroza"
+      "openclaw"
+    ];
   };
 
   # ▸ Display manager override (DE модули ставят user = "", перебиваем тут)
@@ -68,7 +76,6 @@
     extraGroups = [
       "wheel"
       "docker"
-      "i2c"
       "plocate"
     ];
   };
@@ -104,7 +111,6 @@
     htop
     btop
     parted
-    ddcutil
     fastfetch
 
     conntrack-tools
@@ -123,4 +129,53 @@
     git
     telegram-desktop
   ];
+
+  # ▸ Монитор (раскладка двух экранов, host-specific) ───────────────
+  home-manager.users.aleroza.home.file.".config/monitors.xml" = {
+    force = true;
+    text = ''
+      <monitors version="2">
+        <configuration>
+          <layoutmode>physical</layoutmode>
+          <logicalmonitor>
+            <x>320</x>
+            <y>1440</y>
+            <scale>1</scale>
+            <monitor>
+              <monitorspec>
+                <connector>eDP-1</connector>
+                <vendor>LGD</vendor>
+                <product>0x05e5</product>
+                <serial>0x00000000</serial>
+              </monitorspec>
+              <mode>
+                <width>1920</width>
+                <height>1080</height>
+                <rate>59.977</rate>
+              </mode>
+            </monitor>
+          </logicalmonitor>
+          <logicalmonitor>
+            <x>0</x>
+            <y>0</y>
+            <scale>1</scale>
+            <primary>yes</primary>
+            <monitor>
+              <monitorspec>
+                <connector>HDMI-1</connector>
+                <vendor>XMI</vendor>
+                <product>Mi monitor</product>
+                <serial>5392700011291</serial>
+              </monitorspec>
+              <mode>
+                <width>2560</width>
+                <height>1440</height>
+                <rate>59.951</rate>
+              </mode>
+            </monitor>
+          </logicalmonitor>
+        </configuration>
+      </monitors>
+    '';
+  };
 }

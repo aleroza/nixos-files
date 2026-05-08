@@ -1,10 +1,10 @@
 { config, lib, ... }:
 
 let
-  cfg = config.auto;
+  cfg = config.auto.laptop;
 in
 
-lib.mkIf cfg.power.enable {
+lib.mkIf cfg.enable {
 
   services.logind.settings.Login = {
     HandleLidSwitch = "suspend-then-hibernate";

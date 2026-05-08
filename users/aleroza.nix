@@ -1,4 +1,9 @@
-{ config, pkgs, lib, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
 
 # ▸ Home-manager config для пользователя aleroza
 #   Портабельный — не зависит от NixOS-специфичных опций,
@@ -31,14 +36,14 @@
   };
 
   programs.bash.shellAliases = {
-    gs  = "git status";
-    ga  = "git add";
-    gc  = "git commit";
-    gp  = "git push";
-    gl  = "git log --oneline -10";
-    gd  = "git diff";
+    gs = "git status";
+    ga = "git add";
+    gc = "git commit";
+    gp = "git push";
+    gl = "git log --oneline -10";
+    gd = "git diff";
     gco = "git checkout";
-    gb  = "git branch";
+    gb = "git branch";
     gst = "git status";
   };
 
@@ -46,9 +51,6 @@
   home.packages = with pkgs; [
     google-chrome
     nixfmt
-
-    gnomeExtensions.clipboard-indicator
-    gnomeExtensions.brightness-control-using-ddcutil
   ];
 
   # ── Flatpak (настройка, не требующая system-wide flatpak) ───────
@@ -86,9 +88,6 @@
           "org.gnome.Nautilus.desktop"
         ];
         enabled-extensions = [
-          "appindicatorsupport@rgcjonas.gmail.com"
-          "clipboard-indicator@tudmotu.com"
-          "display-brightness-ddcutil@themightydeity.github.com"
         ];
       };
 
@@ -114,15 +113,6 @@
         lock-delay = 0;
       };
 
-      "org/gnome/shell/extensions/display-brightness-ddcutil" = {
-        show-display-name = true;
-        button-location = 1;
-      };
-      "org/gnome/shell/extensions/clipboard-indicator" = {
-        display-mode = 2;
-        topbar-preview-size = 15;
-      };
-
       "org/gnome/desktop/wm/preferences" = {
         button-layout = "appmenu:minimize,maximize,close";
         action-middle-click-titlebar = "minimize";
@@ -139,55 +129,6 @@
     "x-scheme-handler/https" = "google-chrome.desktop";
     "x-scheme-handler/about" = "google-chrome.desktop";
     "x-scheme-handler/unknown" = "google-chrome.desktop";
-  };
-
-  # ── Монитор (раскладка двух экранов) ────────────────────────────
-  home.file.".config/monitors.xml" = {
-    force = true;
-    text = ''
-      <monitors version="2">
-        <configuration>
-          <layoutmode>physical</layoutmode>
-          <logicalmonitor>
-            <x>320</x>
-            <y>1440</y>
-            <scale>1</scale>
-            <monitor>
-              <monitorspec>
-                <connector>eDP-1</connector>
-                <vendor>LGD</vendor>
-                <product>0x05e5</product>
-                <serial>0x00000000</serial>
-              </monitorspec>
-              <mode>
-                <width>1920</width>
-                <height>1080</height>
-                <rate>59.977</rate>
-              </mode>
-            </monitor>
-          </logicalmonitor>
-          <logicalmonitor>
-            <x>0</x>
-            <y>0</y>
-            <scale>1</scale>
-            <primary>yes</primary>
-            <monitor>
-              <monitorspec>
-                <connector>HDMI-1</connector>
-                <vendor>XMI</vendor>
-                <product>Mi monitor</product>
-                <serial>5392700011291</serial>
-              </monitorspec>
-              <mode>
-                <width>2560</width>
-                <height>1440</height>
-                <rate>59.951</rate>
-              </mode>
-            </monitor>
-          </logicalmonitor>
-        </configuration>
-      </monitors>
-    '';
   };
 
   # ── FlClash autostart ───────────────────────────────────────────

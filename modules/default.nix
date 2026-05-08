@@ -2,20 +2,15 @@
 
 {
   imports = [
-    ./base.nix
+    ./base
+    ./security/fail2ban.nix
+    ./flatpak.nix
     ./xserver.nix
-    ./gnome.nix
+    ./gnome
     ./kde.nix
     ./hyprland.nix
-    ./sound.nix
-    ./power.nix
-    ./input.nix
-    ./programs.nix
     ./development.nix
     ./gaming.nix
     ./docker.nix
-    ./hardware.nix
-    ./security.nix
-    ./flatpak.nix
   ];
 }

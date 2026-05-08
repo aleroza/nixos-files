@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # ▸ Основная настройка хоста
@@ -8,17 +13,14 @@
   # ▸ auto — конфигурация этого хоста
   auto = {
     development = true;
-    gaming      = true;
+    gaming = true;
+    desktop = true;
 
     xserver.enable = true;
-    sound.enable   = true;
-    input.enable   = true;
-    programs.enable = true;
-    server       = false;
 
     docker = {
       enable = true;
-      users  = [ "testuser" ];
+      users = [ "testuser" ];
     };
 
     hmUsers = [ "testuser" ];
@@ -31,7 +33,7 @@
     group = name;
   });
 
-  users.groups = lib.genAttrs [ "testuser" ] (name: {});
+  users.groups = lib.genAttrs [ "testuser" ] (name: { });
 
   # А вот так — просто добавить новую фичу:
   # auto.office.enable = true;
