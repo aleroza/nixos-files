@@ -5,10 +5,22 @@ in
 {
   options.auto = {
     # ▸ Feature toggles
-    development = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable development tools (git, compilers, IDEs).";
+    dev = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable base development tools (git, vim, nix-ld).";
+      };
+      nodejs = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable Node.js.";
+      };
+      python = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable Python.";
+      };
     };
 
     gaming = mkOption {

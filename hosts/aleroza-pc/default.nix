@@ -33,7 +33,11 @@
   # ▸ auto — конфигурация этого хоста
   auto = {
     mainUser = "aleroza";
-    development = true;
+    dev = {
+      enable = true;
+      nodejs = true;
+      python = true;
+    };
     gaming = true;
     desktop = true;
 

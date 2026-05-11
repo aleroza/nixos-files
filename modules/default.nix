@@ -9,7 +9,7 @@
     ./gnome
     ./kde.nix
     ./hyprland.nix
-    ./development.nix
+    ./dev
     ./gaming.nix
     ./docker.nix
   ];

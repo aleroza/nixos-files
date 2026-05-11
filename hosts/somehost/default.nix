@@ -12,7 +12,11 @@
 
   # ▸ auto — конфигурация этого хоста
   auto = {
-    development = true;
+    dev = {
+      enable = true;
+      nodejs = true;
+      python = true;
+    };
     gaming = true;
     desktop = true;
 
