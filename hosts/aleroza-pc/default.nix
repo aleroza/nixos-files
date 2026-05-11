@@ -37,7 +37,7 @@
     gaming = true;
     desktop = true;
 
-    xserver.enable = true;
+    # xserver.enable = true; @ Wayland in gnome
     gnome = {
       enable = true;
       extensions = {
@@ -112,6 +112,7 @@
     btop
     parted
     fastfetch
+    git
 
     conntrack-tools
     socat
@@ -126,7 +127,6 @@
     vscode
     gh
     flclash
-    git
     telegram-desktop
   ];
 
