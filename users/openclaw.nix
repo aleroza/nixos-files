@@ -27,7 +27,7 @@
 
   # ── Пакеты ──────────────────────────────────────────────────────
   home.packages = with pkgs; [
-    nodejs_24
+    nodejs
     python3
     gh
     nixfmt
@@ -36,8 +36,18 @@
   # ── Активация: npm global packages ─────────────────────────────
   home.activation = {
     ensureOpenclawDepsPackageJson = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      npm install -g openclaw@latest @tobilu/qmd
-      npm install -g global-agent
+      # Create writable npm global directory if not exists
+      mkdir -p "$HOME/.npm-global/lib"
+      # Check if already installed
+      if [ -d "$HOME/.npm-global/lib/node_modules/openclaw" ]; then
+        echo "openclaw already installed, skipping"
+      else
+        # Ensure node is in PATH for npm preinstall scripts
+        export PATH="${pkgs.nodejs}/bin:$PATH"
+        # Run in background to avoid blocking activation
+        nohup ${pkgs.nodejs}/bin/npm install -g --prefix "$HOME/.npm-global" openclaw@latest > /tmp/openclaw-install.log 2>&1 &
+        echo "openclaw installation started in background, see /tmp/openclaw-install.log"
+      fi
     '';
   };
 

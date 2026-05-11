@@ -5,27 +5,40 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     home-manager.url = "github:nix-community/home-manager/release-25.11";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
+    nix-flatpak.url = "github:gmodena/nix-flatpak?ref=v0.7.0";
   };
 
-  outputs = { self, nixpkgs, home-manager, ... }: let
-    system = "x86_64-linux";
-    pkgs = nixpkgs.legacyPackages.${system};
+  outputs =
+    {
+      self,
+      nixpkgs,
+      home-manager,
+      nix-flatpak,
+      ...
+    }:
+    let
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
 
-    mkHost = hostName: nixpkgs.lib.nixosSystem {
-      inherit system;
-      specialArgs = { inherit self; };
-      modules = [
-        ./modules/auto.nix
-        ./hosts/${hostName}/default.nix
-        ./modules/default.nix
-        home-manager.nixosModules.home-manager
-        ./users/default.nix
-      ];
+      mkHost =
+        hostName:
+        nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = { inherit self nix-flatpak; };
+          modules = [
+            ./modules/auto.nix
+            ./hosts/${hostName}/default.nix
+            ./modules/default.nix
+            home-manager.nixosModules.home-manager
+            nix-flatpak.nixosModules.nix-flatpak
+            ./users/default.nix
+          ];
+        };
+    in
+    {
+      nixosConfigurations = {
+        somehost = mkHost "somehost";
+        aleroza-pc = mkHost "aleroza-pc";
+      };
     };
-  in {
-    nixosConfigurations = {
-      somehost = mkHost "somehost";
-      aleroza-pc = mkHost "aleroza-pc";
-    };
-  };
 }

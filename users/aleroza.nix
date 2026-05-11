@@ -2,6 +2,7 @@
   config,
   pkgs,
   lib,
+  nix-flatpak,
   ...
 }:
 
@@ -10,6 +11,10 @@
 #   может использоваться на других дистрибутивах через standalone HM
 
 {
+  imports = [
+    nix-flatpak.homeManagerModules.nix-flatpak
+  ];
+
   home.username = "aleroza";
   home.homeDirectory = "/home/aleroza";
 
@@ -53,15 +58,19 @@
     nixfmt
   ];
 
-  # ── Flatpak (настройка, не требующая system-wide flatpak) ───────
-  home.activation = {
-    setupFlatpak = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      ${pkgs.flatpak}/bin/flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-    '';
-    installBottles = lib.hm.dag.entryAfter [ "setupFlatpak" ] ''
-      ${pkgs.flatpak}/bin/flatpak --user install --noninteractive flathub com.usebottles.bottles
-      ${pkgs.flatpak}/bin/flatpak override --user com.usebottles.bottles --filesystem=xdg-data/Steam --share=network
-    '';
+  # Uses nix-flatpak for declarative flatpak management
+  # https://github.com/gmodena/nix-flatpak
+  services.flatpak = {
+    enable = true;
+    packages = [
+      "com.usebottles.bottles"
+    ];
+    overrides = {
+      "com.usebottles.bottles".Context = {
+        filesystem = [ "xdg-data/Steam" ];
+        share = [ "network" ];
+      };
+    };
   };
 
   # ── GNOME dconf настройки ───────────────────────────────────────

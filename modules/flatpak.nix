@@ -1,16 +1,31 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
-# ▸ Включится если auto.flatpak = true
-#   Устанавливает Flatpak + Flathub + Flatseal
+# Uses nix-flatpak for declarative flatpak management
+# https://github.com/gmodena/nix-flatpak
 
 lib.mkIf config.auto.flatpak {
 
-  services.flatpak.enable = true;
+  services.flatpak = {
+    enable = true;
 
-  system.activationScripts = {
-    flatpak-setup = ''
-      ${pkgs.flatpak}/bin/flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-      ${pkgs.flatpak}/bin/flatpak install --noninteractive flathub com.github.tchx84.Flatseal
-    '';
+    restartOnFailure = {
+      enable = true;
+      restartDelay = "60s";
+      exponentialBackoff = {
+        enable = true;
+        steps = 10;
+        maxDelay = "1h";
+      };
+    };
   };
+
+  # System-level flatpak apps
+  services.flatpak.packages = [
+    "com.github.tchx84.Flatseal"
+  ];
 }
