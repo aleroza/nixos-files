@@ -24,8 +24,11 @@
         hostName:
         nixpkgs.lib.nixosSystem {
           inherit system;
-          specialArgs = { inherit self nix-flatpak; };
+          specialArgs = {
+            inherit self nix-flatpak;
+          };
           modules = [
+            ./modules/revision.nix
             ./modules/auto.nix
             ./hosts/${hostName}/default.nix
             ./modules/default.nix
