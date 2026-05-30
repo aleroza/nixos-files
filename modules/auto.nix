@@ -74,12 +74,10 @@ in
       };
     };
 
-    laptop = {
-      enable = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Enable laptop lid behavior (suspend/lock on lid close).";
-      };
+    laptop = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable laptop lid behavior (suspend/lock on lid close).";
     };
 
     power = {

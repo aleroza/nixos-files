@@ -40,6 +40,7 @@
     };
     gaming = true;
     desktop = true;
+    laptop = true;
 
     # xserver.enable = true; @ Wayland in gnome
     gnome = {
@@ -132,6 +133,7 @@
     gh
     flclash
     telegram-desktop
+    onlyoffice-desktopeditors
   ];
 
   # ▸ Монитор (раскладка двух экранов, host-specific) ───────────────
