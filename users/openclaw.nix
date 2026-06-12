@@ -2,6 +2,7 @@
   config,
   pkgs,
   lib,
+  auto,
   ...
 }:
 
@@ -9,6 +10,10 @@
 #   Портабельный — не зависит от NixOS-специфичных опций
 
 {
+  imports = [
+    ./modules/npm-global.nix
+  ];
+
   home.username = "openclaw";
   home.homeDirectory = "/home/openclaw";
 
@@ -54,10 +59,22 @@
   # ── Сессионные переменные ──────────────────────────────────────
   home.sessionVariables = {
     PNPM_HOME = "$HOME/.local/share/pnpm";
-    NPM_PACKAGES = "$HOME/.npm-global";
     XDG_RUNTIME_DIR = "/run/user/$(id -u)";
     DBUS_SESSION_BUS_ADDRESS = "unix:path=$XDG_RUNTIME_DIR/bus";
   };
+
+  # ── systemd user dropin: proxy env for openclaw-gateway ────────
+  xdg.configFile."systemd/user/openclaw-gateway.service.d/proxy.conf".text = ''
+    [Service]
+    Environment="http_proxy=http://127.0.0.1:7890"
+    Environment="https_proxy=http://127.0.0.1:7890"
+    Environment="all_proxy=http://127.0.0.1:7890"
+    Environment="HTTP_PROXY=http://127.0.0.1:7890"
+    Environment="HTTPS_PROXY=http://127.0.0.1:7890"
+    Environment="ALL_PROXY=http://127.0.0.1:7890"
+    Environment="NO_PROXY=127.0.0.1,localhost"
+    Environment="no_proxy=127.0.0.1,localhost"
+  '';
 
   # ── Bash initExtras (PATH setup) ───────────────────────────────
   programs.bash.enable = true;
@@ -66,14 +83,6 @@
     case ":$PATH:" in
       *":$PNPM_HOME:"*) ;;
       *) export PATH="$PNPM_HOME:$PATH" ;;
-    esac
-
-    export NPM_CONFIG_PREFIX="$HOME/.npm-global"
-    export NPM_PACKAGES="$HOME/.npm-global"
-    mkdir -p "$NPM_PACKAGES/bin" "$NPM_PACKAGES/lib" 2>/dev/null || true
-    case ":$PATH:" in
-      *":$NPM_PACKAGES/bin:"*) ;;
-      *) export PATH="$NPM_PACKAGES/bin:$PATH" ;;
     esac
 
     __openclaw_ensure_package_json() {

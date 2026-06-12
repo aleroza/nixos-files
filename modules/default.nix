@@ -12,5 +12,6 @@
     ./dev
     ./gaming.nix
     ./docker.nix
+    ./network-capture.nix
   ];
 }

@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  nixpkgs-unstable,
   ...
 }:
 
@@ -37,6 +38,13 @@
       enable = true;
       nodejs = true;
       python = true;
+      networkCapture = {
+        enable = true;
+        users = [
+          "aleroza"
+          "openclaw"
+        ];
+      };
     };
     gaming = true;
     desktop = true;
@@ -121,8 +129,6 @@
 
     conntrack-tools
     socat
-    tcpdump
-    wireshark
     wirelesstools
 
     fd
@@ -131,9 +137,11 @@
 
     vscode
     gh
-    flclash
+    nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.flclash
     telegram-desktop
     onlyoffice-desktopeditors
+
+    prismlauncher
   ];
 
   # ▸ Монитор (раскладка двух экранов, host-specific) ───────────────

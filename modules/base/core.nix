@@ -15,4 +15,9 @@
   networking.networkmanager.enable = true;
 
   nixpkgs.config.allowUnfree = true;
+
+  # ▸ Системные env-переменные (доступны в TTY, login shells и графических сессиях)
+  environment.sessionVariables = {
+    HOSTNAME = config.networking.hostName;
+  };
 }

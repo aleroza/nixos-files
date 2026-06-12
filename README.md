@@ -73,12 +73,21 @@ modules/
 ├── power.nix             # logind (управление питанием)
 ├── input.nix             # libinput (тачпад)
 ├── programs.nix          # Firefox и общие программы
-├── development.nix       # dev tools
+├── development.nix        # dev tools
 ├── gaming.nix            # Steam / Lutris / MangoHud
 ├── docker.nix            # Docker daemon
 ├── hardware.nix          # bluetooth, CUPS и пр.
 ├── security.nix          # fail2ban, ssh
-└── flatpak.nix           # Flatpak / flathub
+├── flatpak.nix           # Flatpak / flathub
+└── dev/                  # dev tooling (nodejs, python)
+
+users/
+├── modules/
+│   └── npm-global.nix    # npm global bin PATH
+├── aleroza.nix
+├── default.nix
+├── openclaw.nix
+└── testuser.nix
 ```
 
 ## Secrets

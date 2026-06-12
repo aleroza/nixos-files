@@ -27,6 +27,14 @@ To add a feature:
 3. `modules/auto.nix` — declare `options.auto.<name> = mkOption { type = types.bool; default = false; }`
 4. Host config — set `auto.<name> = true/false`
 
+## User Modules
+
+Home-manager модули живут в `users/modules/`. Они активируются через `auto.*` флаги (передаются через `extraSpecialArgs`).
+
+To add a user module:
+1. `users/modules/<name>.nix` — create module, use `lib.mkIf auto.<feature>`
+2. `users/<user>.nix` — add `imports = [ ./modules/<name>.nix ]`
+
 ## Architecture
 
 - `flake.nix` — single source of truth for nixpkgs/home-manager inputs; two hosts via `mkHost`

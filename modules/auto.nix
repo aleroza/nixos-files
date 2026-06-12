@@ -21,6 +21,24 @@ in
         default = false;
         description = "Enable Python.";
       };
+      networkCapture = {
+        enable = mkOption {
+          type = types.bool;
+          default = false;
+          description = ''
+            Enable packet capture tools (wireshark/tcpdump) and grant
+            capture rights to users listed in auto.dev.networkCapture.users.
+          '';
+        };
+        users = mkOption {
+          type = types.listOf types.str;
+          default = lib.lists.optional (config.auto.mainUser != "") config.auto.mainUser;
+          description = ''
+            Users added to the 'wireshark' group. Members can run
+            dumpcap/tcpdump/wireshark without root via CAP_NET_RAW.
+          '';
+        };
+      };
     };
 
     gaming = mkOption {

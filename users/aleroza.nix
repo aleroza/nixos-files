@@ -3,6 +3,7 @@
   pkgs,
   lib,
   nix-flatpak,
+  nixpkgs-unstable,
   ...
 }:
 
@@ -13,6 +14,7 @@
 {
   imports = [
     nix-flatpak.homeManagerModules.nix-flatpak
+    ./modules/npm-global.nix
   ];
 
   home.username = "aleroza";
@@ -146,7 +148,7 @@
     Type=Application
     Name=FlClash
     Comment=FlClash startup script
-    Exec=${pkgs.flclash}/app/flclash/FlClash
+    Exec=${nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.flclash}/app/flclash/FlClash
     StartupNotify=false
     Terminal=false
   '';

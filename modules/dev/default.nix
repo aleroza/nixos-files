@@ -20,7 +20,10 @@ in
     environment.systemPackages = with pkgs; [
       git
       vim
-      # bind
+      bind
+
+      tldr
+      p7zip
     ];
   };
 }

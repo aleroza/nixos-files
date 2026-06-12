@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     home-manager.url = "github:nix-community/home-manager/release-25.11";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
     nix-flatpak.url = "github:gmodena/nix-flatpak?ref=v0.7.0";
@@ -12,6 +13,7 @@
     {
       self,
       nixpkgs,
+      nixpkgs-unstable,
       home-manager,
       nix-flatpak,
       ...
@@ -25,7 +27,7 @@
         nixpkgs.lib.nixosSystem {
           inherit system;
           specialArgs = {
-            inherit self nix-flatpak;
+            inherit self nix-flatpak nixpkgs-unstable;
           };
           modules = [
             ./modules/revision.nix
