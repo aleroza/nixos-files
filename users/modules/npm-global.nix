@@ -1,4 +1,9 @@
-{ config, lib, auto, ... }:
+{
+  config,
+  lib,
+  auto,
+  ...
+}:
 
 {
   config = lib.mkIf auto.dev.nodejs {
@@ -7,10 +12,9 @@
     };
 
     programs.bash.initExtra = ''
-      export NPM_GLOBAL_BIN="$HOME/.npm-global/bin"
       case ":$PATH:" in
-        *":$NPM_GLOBAL_BIN:"*) ;;
-        *) export PATH="$NPM_GLOBAL_BIN:$PATH" ;;
+        *":$NPM_CACHE:"*) ;;
+        *) export PATH="$NPM_CACHE/global/bin:$PATH" ;;
       esac
     '';
   };
