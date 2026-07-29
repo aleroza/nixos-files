@@ -155,6 +155,7 @@
     parted
     fastfetch
     git
+    inotify-tools
 
     conntrack-tools
     socat
@@ -186,7 +187,7 @@
     text = ''
       <monitors version="2">
         <configuration>
-          <layoutmode>physical</layoutmode>
+          <layoutmode>logical</layoutmode>
           <logicalmonitor>
             <x>320</x>
             <y>1440</y>

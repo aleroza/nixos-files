@@ -143,15 +143,18 @@
   };
 
   # ── FlClash autostart ───────────────────────────────────────────
-  xdg.configFile."autostart/FlClash.desktop".text = ''
-    [Desktop Entry]
-    Type=Application
-    Name=FlClash
-    Comment=FlClash startup script
-    Exec=${nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.flclash}/app/flclash/FlClash
-    StartupNotify=false
-    Terminal=false
-  '';
+  xdg.configFile."autostart/FlClash.desktop" = {
+    force = true;
+    text = ''
+      [Desktop Entry]
+      Type=Application
+      Name=FlClash
+      Comment=FlClash startup script
+      Exec=${nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.flclash}/app/flclash/FlClash
+      StartupNotify=false
+      Terminal=false
+    '';
+  };
 
   # ── Deluge daemon (per-user systemd unit) ────────────────────────
   # Runs as a background daemon the user owns. deluge-gtk / deluge-console
