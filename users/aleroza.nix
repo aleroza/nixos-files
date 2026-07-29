@@ -152,4 +152,22 @@
     StartupNotify=false
     Terminal=false
   '';
+
+  # ── Deluge daemon (per-user systemd unit) ────────────────────────
+  # Runs as a background daemon the user owns. deluge-gtk / deluge-console
+  # connect to 127.0.0.1:58846 with the `localclient` account defined in
+  # ~/.config/deluge/auth. Requires `linger = true` on the user so the
+  # unit keeps running after the last graphical session ends.
+  systemd.user.services.deluged = {
+    Unit = {
+      Description = "Deluge BitTorrent Daemon";
+      After = [ "network.target" ];
+    };
+    Service = {
+      ExecStart = "${pkgs.deluge}/bin/deluged -d";
+      Restart = "on-failure";
+      RestartSec = 5;
+    };
+    Install = { WantedBy = [ "default.target" ]; };
+  };
 }

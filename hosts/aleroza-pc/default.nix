@@ -49,6 +49,28 @@
     gaming = true;
     firewall = {
       gaming = true;
+      # Interfaces trusted by the firewall (required for LAN game discovery).
+      # Run `ip link` to find the correct name; common values:
+      #   wlan0, wlp1s0, wlp3s0  (Wi-Fi)
+      #   enp0s3, eth0            (Ethernet)
+      # `tailscale0` is added for hosting games over the tailnet.
+      trustedInterfaces = [
+        "wlp1s0"
+      ];
+      # Deluge default listen port — required so peers can connect back
+      # to us; without it the firewall blocks incoming and only seeds
+      # that initiate the TCP connection actually transfer data.
+      allowedTCPPorts = [
+        53
+        67
+        6881
+      ];
+      allowedUDPPorts = [
+        53
+        67
+        68
+        6881
+      ];
     };
     desktop = true;
     laptop = true;
@@ -79,6 +101,9 @@
   # ▸ Display manager override (DE модули ставят user = "", перебиваем тут)
   services.displayManager.autoLogin.user = lib.mkForce "aleroza";
 
+  # services.deluge.enable = true;
+  # services.deluge.openFirewall = true;
+
   # ▸ Группы
   users.groups = {
     openclaw = { };
@@ -89,6 +114,7 @@
   users.users.aleroza = {
     hashedPasswordFile = "/etc/nixos/secrets/aleroza-password";
     isNormalUser = true;
+    linger = true;
     extraGroups = [
       "wheel"
       "docker"
@@ -143,8 +169,15 @@
     nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.flclash
     telegram-desktop
     onlyoffice-desktopeditors
+    filezilla
 
     prismlauncher
+
+    ntfs3g
+    exfat
+    dosfstools
+    darktable
+    exiftool
   ];
 
   # ▸ Монитор (раскладка двух экранов, host-specific) ───────────────

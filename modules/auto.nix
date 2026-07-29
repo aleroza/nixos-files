@@ -54,8 +54,39 @@ in
         description = ''
           Open firewall ports for LAN/hosted multiplayer games
           (Jackbox, Pico Park, etc.), Steam Remote Play, Steam LAN game
-          transfers, and Source Dedicated Server. Also trusts the
-          'tailscale0' interface for discovery.
+          transfers, and Source Dedicated Server.
+        '';
+      };
+      trustedInterfaces = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        example = [ "wlan0" "tailscale0" ];
+        description = ''
+          Interfaces treated as trusted LAN by the firewall. Required for
+          LAN game discovery (mDNS, broadcast) to work — open ports alone
+          are not enough, as NixOS' default firewall blocks incoming
+          traffic on non-trusted interfaces. Find interface names with
+          `ip link`.
+        '';
+      };
+      allowedTCPPorts = mkOption {
+        type = types.listOf types.port;
+        default = [ ];
+        example = [ 6881 51413 ];
+        description = ''
+          Extra TCP ports to open on the firewall, in addition to the
+          feature-defined port sets (e.g. gaming). Merged into a single
+          `networking.firewall.allowedTCPPorts` list by modules/firewall.
+        '';
+      };
+      allowedUDPPorts = mkOption {
+        type = types.listOf types.port;
+        default = [ ];
+        example = [ 6881 ];
+        description = ''
+          Extra UDP ports to open on the firewall, in addition to the
+          feature-defined port sets (e.g. gaming). Merged into a single
+          `networking.firewall.allowedUDPPorts` list by modules/firewall.
         '';
       };
     };
