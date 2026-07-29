@@ -47,6 +47,19 @@ in
       description = "Enable gaming tools (Steam, Lutris, MangoHud).";
     };
 
+    firewall = {
+      gaming = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Open firewall ports for LAN/hosted multiplayer games
+          (Jackbox, Pico Park, etc.), Steam Remote Play, Steam LAN game
+          transfers, and Source Dedicated Server. Also trusts the
+          'tailscale0' interface for discovery.
+        '';
+      };
+    };
+
     server = mkOption {
       type = types.bool;
       default = false;

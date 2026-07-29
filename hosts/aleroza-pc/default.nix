@@ -47,6 +47,9 @@
       };
     };
     gaming = true;
+    firewall = {
+      gaming = true;
+    };
     desktop = true;
     laptop = true;
 

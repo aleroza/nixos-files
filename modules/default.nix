@@ -11,6 +11,7 @@
     ./hyprland.nix
     ./dev
     ./gaming.nix
+    ./firewall/gaming.nix
     ./docker.nix
     ./network-capture.nix
   ];
