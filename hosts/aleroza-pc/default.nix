@@ -194,10 +194,8 @@
     description = "OpenClaw service account";
   };
 
-  # ▸ Hermes (system user, created by hermes-agent NixOS module)
-  # Grant nixbld so hermes can run nix builds / nixos-rebuild build
-  # against its own profile without sudo. Final activation is done via
-  # the dedicated `nixos-activate.service` systemd unit (see below).
+  # ▸ Hermes (system user, created by hermes-agent NixOS module).
+  # See hosts/aleroza-pc/README.md for full rationale.
   users.users.hermes.extraGroups = [ "nixbld" ];
 
   # ▸ Hermes Agent (managed by hermes-agent NixOS module)
@@ -340,27 +338,10 @@
     '';
   };
 
-  # ▸ Hermes-triggered system activation (NNP-safe)
-  #
-  # Lets the hermes user activate a new nixos generation without sudo /
-  # without disabling NoNewPrivileges on hermes-agent.service.
-  #
-  # Flow:
-  #   1. hermes writes its flake to /var/lib/hermes/workspace/nixos-files
-  #      and commits/pushes.
-  #   2. hermes touches /var/lib/hermes/workspace/.switch-request
-  #   3. systemd.paths.nixos-activate-trigger notices the file and runs
-  #      nixos-activate.service as root.
-  #   4. The service runs `nixos-rebuild switch` from the hermes-owned
-  #      flake directory, refuses if there are uncommitted changes, and
-  #      stamps the new generation with a unique profile name so it can
-  #      be rolled back via boot loader.
-  #
-  # The service itself runs as root with NNP=false — this is the only
-  # place we cross the privilege boundary, and only on the explicit
-  # trigger from hermes (file existence). hermes never gets a shell
-  # or sudo on the system.
-
+  # ▸ Hermes-triggered system activation (NNP-safe).
+  # Root systemd unit + path trigger so hermes can switch generations
+  # without sudo / without disabling NNP on hermes-agent.service.
+  # See hosts/aleroza-pc/README.md for the full workflow and rationale.
   systemd.services.nixos-activate = {
     description = "Hermes-triggered nixos-rebuild switch (allowlisted)";
     wantedBy = [ ];
@@ -369,7 +350,7 @@
     serviceConfig = {
       Type = "oneshot";
       User = "root";
-      NoNewPrivileges = false;        # root unit; does not affect hermes NNP
+      NoNewPrivileges = false;
       ProtectSystem = "full";
       ProtectHome = true;
       PrivateTmp = true;
@@ -383,8 +364,7 @@
       [ -d "$FLAKE_DIR" ] || { echo "no flake dir at $FLAKE_DIR" >&2; rm -f "$REQUEST"; exit 1; }
       cd "$FLAKE_DIR"
 
-      # Refuse to activate from a dirty tree. Avoids leaving the system
-      # in a state where the running config diverges from git history.
+      # Refuse to activate from a dirty tree.
       if ! git diff --quiet HEAD -- .; then
         echo "uncommitted changes in $FLAKE_DIR; refusing" >&2
         rm -f "$REQUEST"
