@@ -194,6 +194,10 @@
     description = "OpenClaw service account";
   };
 
+  # ▸ Hermes (system user, created by hermes-agent NixOS module).
+  # See hosts/aleroza-pc/README.md for full rationale.
+  users.users.hermes.extraGroups = [ "nixbld" ];
+
   # ▸ Hermes Agent (managed by hermes-agent NixOS module)
   services.hermes-agent = {
     enable = true;
@@ -332,5 +336,69 @@
         </configuration>
       </monitors>
     '';
+  };
+
+  # ▸ Hermes-triggered system activation (NNP-safe).
+  # Root systemd unit + path trigger so hermes can switch generations
+  # without sudo / without disabling NNP on hermes-agent.service.
+  # See hosts/aleroza-pc/README.md for the full workflow and rationale.
+  systemd.services.nixos-activate = {
+    description = "Hermes-triggered nixos-rebuild switch (allowlisted)";
+    wantedBy = [ ];
+    wants = [ "network-online.target" ];
+    after = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      User = "root";
+      NoNewPrivileges = false;
+      ProtectSystem = "full";
+      ProtectHome = true;
+      PrivateTmp = true;
+      ReadWritePaths = "/var/lib/hermes/workspace/nixos-files /nix/store";
+    };
+    script = ''
+      set -euo pipefail
+      FLAKE_DIR=/var/lib/hermes/workspace/nixos-files
+      REQUEST=/var/lib/hermes/workspace/.switch-request
+
+      [ -d "$FLAKE_DIR" ] || { echo "no flake dir at $FLAKE_DIR" >&2; rm -f "$REQUEST"; exit 1; }
+      cd "$FLAKE_DIR"
+
+      # Refuse to activate from a dirty tree.
+      if ! git diff --quiet HEAD -- .; then
+        echo "uncommitted changes in $FLAKE_DIR; refusing" >&2
+        rm -f "$REQUEST"
+        exit 2
+      fi
+
+      # Lock around concurrent switches.
+      LOCK=/var/run/nixos-activate.lock
+      exec 9>"$LOCK"
+      if ! flock -n 9; then
+        echo "another switch already in progress" >&2
+        rm -f "$REQUEST"
+        exit 3
+      fi
+
+      GEN="hermes-$(date +%Y%m%d-%H%M%S)"
+      echo "activating generation $GEN"
+
+      nixos-rebuild switch \
+        --flake "/var/lib/hermes/workspace/nixos-files#aleroza-pc" \
+        --install-bootloader \
+        --profile-name "$GEN"
+
+      rc=$?
+      rm -f "$REQUEST"
+      exit $rc
+    '';
+  };
+
+  systemd.paths.nixos-activate-trigger = {
+    pathConfig = {
+      PathExists = "/var/lib/hermes/workspace/.switch-request";
+      Unit = "nixos-activate.service";
+    };
+    wantedBy = [ "paths.target" ];
   };
 }
