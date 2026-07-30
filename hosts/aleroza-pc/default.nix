@@ -152,21 +152,10 @@
           mode = "0400";
         }
         // attrs;
-      # Когда у openclaw появится свой age-ключ, добавь заготовку
-      # openclawSecret здесь и раскомментируй строку в { ... } ниже.
-      # openclawSecret = attrs: {
-      #   sopsFile = ./secrets/hosts/aleroza-pc/openclaw.yaml;
-      #   owner = "openclaw";
-      #   group = "openclaw";
-      #   mode = "0400";
-      # } // attrs;
     in
     {
       "aleroza/password" = alerozaSecret { };
       "aleroza/dockerhub/password" = alerozaSecret { };
-      # Hermes env lives under the aleroza sops file (nested key `hermes.env`)
-      # so a single file owns all operator secrets. Owner/group must be
-      # hermes:hermes so the systemd unit (User=hermes) can read it.
       "hermes/env" = alerozaSecret {
         owner = "hermes";
         group = "hermes";
@@ -208,27 +197,6 @@
   # ▸ Hermes Agent (managed by hermes-agent NixOS module)
   services.hermes-agent = {
     enable = true;
-    container.enable = true;
-    container.image = "ubuntu:26.04";
-    container.hostUsers = [ "aleroza" ];
-    container.extraOptions = [
-      "--env"
-      "HTTP_PROXY=http://127.0.0.1:7890"
-      "--env"
-      "HTTPS_PROXY=http://127.0.0.1:7890"
-      "--env"
-      "ALL_PROXY=http://127.0.0.1:7890"
-      "--env"
-      "http_proxy=http://127.0.0.1:7890"
-      "--env"
-      "https_proxy=http://127.0.0.1:7890"
-      "--env"
-      "all_proxy=http://127.0.0.1:7890"
-      "--env"
-      "NO_PROXY=127.0.0.1,localhost,::1"
-      "--env"
-      "no_proxy=127.0.0.1,localhost,::1"
-    ];
     addToSystemPackages = true;
     environmentFiles = [ "/run/secrets/hermes/env" ];
     environment = {
@@ -244,12 +212,7 @@
     settings.model = "minimax/MiniMax-M3";
     settings.toolsets = [ "all" ];
 
-    # ── Workaround: upstream wheel omits hermes_state_common.py etc.
-    #   pyproject.toml only ships hermes_state.py as a package, so the
-    #   sibling modules (common, portability, schema, search) are missing
-    #   in the wheel and ModuleNotFoundError fires at runtime. We patch
-    #   the wrapped venv post-install by copying them from pythonSrc into
-    #   site-packages so the imports resolve.
+    # Fix "ModuleNotFoundError: No module named 'hermes_state_common'"
     package =
       let
         basePkg = hermes-agent.packages.x86_64-linux.default;
@@ -257,9 +220,6 @@
         venv = basePkg.hermesVenv;
       in
       basePkg.overrideAttrs (old: {
-        # Wrap the makeWrapper'd bin scripts so we can prepend a writable
-        # site-packages dir to PYTHONPATH without mutating the read-only
-        # store paths in the upstream venv.
         postInstall = (old.postInstall or "") + ''
           mkdir -p $out/lib/python3.12/site-packages
           for mod in hermes_state_common hermes_state_portability hermes_state_schema hermes_state_search; do
