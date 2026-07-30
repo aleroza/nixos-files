@@ -350,14 +350,6 @@
       Type = "oneshot";
       User = "root";
       RuntimeDirectory = "nixos-activate";
-      # Hermes supervises activations — failed activations are visible
-      # via journalctl and a stale .pending-switch. systemd's default
-      # start-limit (5 in 10s) bites when we're iterating fast on
-      # a broken config: the path unit then sits in
-      # unit-start-limit-hit and stops firing until someone resets
-      # it by hand. Disable both rate limits entirely.
-      StartLimitIntervalSec = 0;
-      StartLimitBurst = 0;
     };
     script = ''
       export PATH=/run/current-system/sw/bin
