@@ -97,14 +97,6 @@
           username = "aleroza";
           passwordFile = "/run/secrets/aleroza/dockerhub/password";
         }
-        # openclaw запись добавь, когда появится его age-ключ:
-        #   1. сгенерируй ключ и пропиши его в hosts/aleroza-pc/.sops.yaml
-        #   2. раскомментируй ниже и добавь sops.secret
-        # {
-        #   user = "openclaw";
-        #   username = "openclaw";
-        #   passwordFile = "/run/secrets/openclaw/dockerhub/password";
-        # }
       ];
     };
 
@@ -112,7 +104,6 @@
       enable = true;
       users = [
         "aleroza"
-        "openclaw"
       ];
     };
 
@@ -135,12 +126,6 @@
   };
 
   # ▸ sops-nix: расшифрованные секреты.
-  #   Имя секрета мапится на путь в YAML-файле: "a/b/c" → a.b.c в документе.
-  #   Все ключи пользователя aleroza лежат в одном файле aleroza.yaml
-  #   (вложенные под ключ aleroza:/). Каждый лист декларируется отдельно,
-  #   потому что sops.secrets — attrsOf, не listOf. Фабрика alerozaSecret
-  #   хранит общий sopsFile + дефолтные owner/group/mode, элементы
-  #   переопределяют только то, что отличается.
   sops.secrets =
     let
       alerozaSecret =
@@ -161,12 +146,9 @@
         group = "hermes";
         mode = "0400";
       };
-      # "openclaw/dockerhub/password" = openclawSecret { };
     };
 
   # ▸ Подсказываем интерактивному `sops`, какие правила шифрования применять.
-  #   Без этого придётся либо `cd hosts/aleroza-pc`, либо каждый раз передавать
-  #   --config / выставлять SOPS_CONFIG вручную.
   environment.sessionVariables.SOPS_CONFIG = toString ./.sops.yaml;
 
   # ▸ Пользователь aleroza
@@ -196,7 +178,9 @@
 
   # ▸ Hermes (system user, created by hermes-agent NixOS module).
   # See hosts/aleroza-pc/README.md for full rationale.
-  users.users.hermes.extraGroups = [ "nixbld" ];
+  users.users.hermes.extraGroups = [
+    "systemd-journal"
+  ];
 
   # ▸ Hermes Agent (managed by hermes-agent NixOS module)
   services.hermes-agent = {
@@ -264,6 +248,7 @@
     fastfetch
     git
     inotify-tools
+    bpftrace
 
     conntrack-tools
     socat
@@ -341,70 +326,70 @@
   # ▸ Hermes-triggered system activation (NNP-safe).
   # Root systemd unit + path trigger so hermes can switch generations
   # without sudo / without disabling NNP on hermes-agent.service.
-  # See hosts/aleroza-pc/README.md for the full workflow and rationale.
+  #
+  # Workflow:
+  #   1. Hermes edits the flake and commits.
+  #   2. Hermes runs `nix build` itself (as hermes, nixbld group) to
+  #      produce the system closure in /nix/store.
+  #   3. Hermes writes the closure path to
+  #      /var/lib/hermes/workspace/.pending-switch.
+  #   4. Hermes touches /var/lib/hermes/workspace/.switch-request.
+  #   5. systemd.paths triggers nixos-activate.service.
+  #   6. The service (as root, NNP=false) reads .pending-switch and
+  #      runs switch-to-configuration against that closure.
+  #
+  # The service does NOT build — the closure must already exist in
+  # /nix/store. If the build fails, hermes catches it before
+  # touching the request flag. See hosts/aleroza-pc/README.md.
   systemd.services.nixos-activate = {
-    description = "Hermes-triggered nixos-rebuild switch (allowlisted)";
+    description = "Hermes-triggered nixos-rebuild activate (allowlisted)";
     wantedBy = [ ];
     wants = [ "network-online.target" ];
     after = [ "network-online.target" ];
     serviceConfig = {
       Type = "oneshot";
       User = "root";
-      NoNewPrivileges = false;
-      ProtectSystem = "full";
-      ProtectHome = true;
-      PrivateTmp = true;
-      ReadWritePaths = [
-        "/var/lib/hermes/workspace/nixos-files"
-        "/nix/store"
-        "/var/run"
-      ];
       RuntimeDirectory = "nixos-activate";
     };
-    # systemd units inherit a minimal PATH from systemd (coreutils, sed,
-    # grep, findutils only — no git, no nixos-rebuild). Re-export the
-    # full system PATH at the top of the script so the body can call
-    # git, nixos-rebuild, flock, date without absolute paths.
     script = ''
       export PATH=/run/current-system/sw/bin
+      export HOME=/var/root
       set -euo pipefail
-      FLAKE_DIR=/var/lib/hermes/workspace/nixos-files
-      REQUEST=/var/lib/hermes/workspace/.switch-request
 
-      [ -d "$FLAKE_DIR" ] || { echo "no flake dir at $FLAKE_DIR" >&2; rm -f "$REQUEST"; exit 1; }
-      cd "$FLAKE_DIR"
+      WORKSPACE=/var/lib/hermes/workspace
+      REQUEST="$WORKSPACE/.switch-request"
+      PENDING="$WORKSPACE/.pending-switch"
 
-      # Tooling check — fail with a distinct code if git is missing
-      # rather than silently treating "command not found" as dirty tree.
-      command -v git    >/dev/null || { echo "git not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
-      command -v nixos-rebuild >/dev/null || { echo "nixos-rebuild not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
+      # Tooling check.
+      command -v flock >/dev/null || { echo "flock not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
 
-      # Refuse to activate from a dirty tree.
-      if ! git diff --quiet HEAD -- .; then
-        echo "uncommitted changes in $FLAKE_DIR; refusing" >&2
-        rm -f "$REQUEST"
-        exit 2
-      fi
-
-      # Lock around concurrent switches.
+      # Lock against concurrent activations.
       LOCK=/run/nixos-activate/lock
       exec 9>"$LOCK"
       if ! flock -n 9; then
-        echo "another switch already in progress" >&2
+        echo "another activation in progress" >&2
         rm -f "$REQUEST"
         exit 3
       fi
 
-      GEN="hermes-$(date +%Y%m%d-%H%M%S)"
-      echo "activating generation $GEN"
+      # Read the closure path that hermes built and stamped into
+      # .pending-switch. Refuse if missing or doesn't look like a
+      # /nix/store path.
+      [ -f "$PENDING" ] || { echo "no pending switch at $PENDING" >&2; rm -f "$REQUEST"; exit 7; }
+      CLOSURE=$(cat "$PENDING")
+      case "$CLOSURE" in
+        /nix/store/*-nixos-system-aleroza-pc-*) ;;
+        *) echo "pending switch points to unexpected path: $CLOSURE" >&2; rm -f "$REQUEST" "$PENDING"; exit 8 ;;
+      esac
+      [ -x "$CLOSURE/bin/switch-to-configuration" ] || { echo "no switch-to-configuration in $CLOSURE" >&2; rm -f "$REQUEST" "$PENDING"; exit 9; }
 
-      nixos-rebuild switch \
-        --flake "/var/lib/hermes/workspace/nixos-files#aleroza-pc" \
-        --install-bootloader \
-        --profile-name "$GEN"
+      GEN="hermes-$(date +%Y%m%d-%H%M%S)"
+      echo "activating generation $GEN from $CLOSURE"
+
+      "$CLOSURE/bin/switch-to-configuration" switch
 
       rc=$?
-      rm -f "$REQUEST"
+      rm -f "$REQUEST" "$PENDING"
       exit $rc
     '';
   };
@@ -414,6 +399,11 @@
       PathExists = "/var/lib/hermes/workspace/.switch-request";
       Unit = "nixos-activate.service";
     };
+    # Disable the path unit's trigger rate limit too. Default is
+    # 200 triggers per 10s; harmless in normal use, but combined
+    # with the service start-limit above it makes "stuck after a
+    # failure" very easy to hit during iteration.
+    unitConfig.TriggerLimitIntervalSec = 0;
     wantedBy = [ "paths.target" ];
   };
 }
