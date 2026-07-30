@@ -243,6 +243,7 @@
     vim
     wget
     htop
+    btop
     parted
     fastfetch
     git
@@ -348,16 +349,6 @@
     serviceConfig = {
       Type = "oneshot";
       User = "root";
-      NoNewPrivileges = false;
-      ProtectSystem = "off";
-      ProtectHome = false;
-      PrivateTmp = true;
-      ReadWritePaths = [
-        "/var/lib/hermes/workspace/nixos-files"
-        "/nix/store"
-        "/var/run"
-        "/boot"
-      ];
       RuntimeDirectory = "nixos-activate";
     };
     script = ''
