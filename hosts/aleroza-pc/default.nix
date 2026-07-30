@@ -347,6 +347,10 @@
     wantedBy = [ ];
     wants = [ "network-online.target" ];
     after = [ "network-online.target" ];
+    # Root unit gets a minimal PATH from systemd by default (no git,
+    # no nixos-rebuild). Re-inject the system PATH so the script can
+    # call git, nixos-rebuild, flock, date without absolute paths.
+    environment.PATH = "/run/current-system/sw/bin";
     serviceConfig = {
       Type = "oneshot";
       User = "root";
@@ -354,7 +358,12 @@
       ProtectSystem = "full";
       ProtectHome = true;
       PrivateTmp = true;
-      ReadWritePaths = "/var/lib/hermes/workspace/nixos-files /nix/store";
+      ReadWritePaths = [
+        "/var/lib/hermes/workspace/nixos-files"
+        "/nix/store"
+        "/var/run"
+      ];
+      RuntimeDirectory = "nixos-activate";
     };
     script = ''
       set -euo pipefail
@@ -364,6 +373,11 @@
       [ -d "$FLAKE_DIR" ] || { echo "no flake dir at $FLAKE_DIR" >&2; rm -f "$REQUEST"; exit 1; }
       cd "$FLAKE_DIR"
 
+      # Tooling check — fail with a distinct code if git is missing
+      # rather than silently treating "command not found" as dirty tree.
+      command -v git    >/dev/null || { echo "git not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
+      command -v nixos-rebuild >/dev/null || { echo "nixos-rebuild not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
+
       # Refuse to activate from a dirty tree.
       if ! git diff --quiet HEAD -- .; then
         echo "uncommitted changes in $FLAKE_DIR; refusing" >&2
@@ -372,7 +386,7 @@
       fi
 
       # Lock around concurrent switches.
-      LOCK=/var/run/nixos-activate.lock
+      LOCK=/run/nixos-activate/lock
       exec 9>"$LOCK"
       if ! flock -n 9; then
         echo "another switch already in progress" >&2
