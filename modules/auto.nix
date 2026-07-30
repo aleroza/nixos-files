@@ -217,6 +217,32 @@ in
       description = "Enable fail2ban.";
     };
 
+    # ▸ SOPS (age-encrypted secrets)
+    sops = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Enable sops-nix. Activates the sops NixOS module, which decrypts
+          secrets declared via `sops.secrets.<name>` (paths placed under
+          /run/secrets by default) using age keys provisioned by
+          `sops.age.sshKeyPaths` / `sops.age.keyFile`.
+
+          Also creates `~/.config/sops/age/keys.txt` for the users in
+          `auto.sops.users` so they can run `sops` interactively.
+        '';
+      };
+
+      users = mkOption {
+        type = types.listOf types.str;
+        default = lib.lists.optional (config.auto.mainUser != "") config.auto.mainUser;
+        description = ''
+          Users for whom `~/.config/sops/age/keys.txt` is provisioned so
+          they can encrypt/edit secrets interactively.
+        '';
+      };
+    };
+
     # ▸ Home-manager users
     hmUsers = mkOption {
       type = types.listOf types.str;

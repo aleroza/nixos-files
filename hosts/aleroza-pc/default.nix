@@ -3,6 +3,7 @@
   lib,
   pkgs,
   nixpkgs-unstable,
+  hermes-agent,
   ...
 }:
 
@@ -90,6 +91,29 @@
     docker = {
       enable = true;
       users = [ "openclaw" ];
+      login = [
+        {
+          user = "aleroza";
+          username = "aleroza";
+          passwordFile = "/run/secrets/aleroza/dockerhub/password";
+        }
+        # openclaw запись добавь, когда появится его age-ключ:
+        #   1. сгенерируй ключ и пропиши его в hosts/aleroza-pc/.sops.yaml
+        #   2. раскомментируй ниже и добавь sops.secret
+        # {
+        #   user = "openclaw";
+        #   username = "openclaw";
+        #   passwordFile = "/run/secrets/openclaw/dockerhub/password";
+        # }
+      ];
+    };
+
+    sops = {
+      enable = true;
+      users = [
+        "aleroza"
+        "openclaw"
+      ];
     };
 
     hmUsers = [
@@ -110,9 +134,55 @@
     plocate = { };
   };
 
+  # ▸ sops-nix: расшифрованные секреты.
+  #   Имя секрета мапится на путь в YAML-файле: "a/b/c" → a.b.c в документе.
+  #   Все ключи пользователя aleroza лежат в одном файле aleroza.yaml
+  #   (вложенные под ключ aleroza:/). Каждый лист декларируется отдельно,
+  #   потому что sops.secrets — attrsOf, не listOf. Фабрика alerozaSecret
+  #   хранит общий sopsFile + дефолтные owner/group/mode, элементы
+  #   переопределяют только то, что отличается.
+  sops.secrets =
+    let
+      alerozaSecret =
+        attrs:
+        {
+          sopsFile = ./secrets/users/aleroza.yaml;
+          owner = "aleroza";
+          group = "users";
+          mode = "0400";
+        }
+        // attrs;
+      # Когда у openclaw появится свой age-ключ, добавь заготовку
+      # openclawSecret здесь и раскомментируй строку в { ... } ниже.
+      # openclawSecret = attrs: {
+      #   sopsFile = ./secrets/hosts/aleroza-pc/openclaw.yaml;
+      #   owner = "openclaw";
+      #   group = "openclaw";
+      #   mode = "0400";
+      # } // attrs;
+    in
+    {
+      "aleroza/password" = alerozaSecret { };
+      "aleroza/dockerhub/password" = alerozaSecret { };
+      # Hermes env lives under the aleroza sops file (nested key `hermes.env`)
+      # so a single file owns all operator secrets. Owner/group must be
+      # hermes:hermes so the systemd unit (User=hermes) can read it.
+      "hermes/env" = alerozaSecret {
+        owner = "hermes";
+        group = "hermes";
+        mode = "0400";
+      };
+      # "openclaw/dockerhub/password" = openclawSecret { };
+    };
+
+  # ▸ Подсказываем интерактивному `sops`, какие правила шифрования применять.
+  #   Без этого придётся либо `cd hosts/aleroza-pc`, либо каждый раз передавать
+  #   --config / выставлять SOPS_CONFIG вручную.
+  environment.sessionVariables.SOPS_CONFIG = toString ./.sops.yaml;
+
   # ▸ Пользователь aleroza
   users.users.aleroza = {
-    hashedPasswordFile = "/etc/nixos/secrets/aleroza-password";
+    hashedPasswordFile = "/run/secrets/aleroza/password";
     isNormalUser = true;
     linger = true;
     extraGroups = [
@@ -133,6 +203,80 @@
     ];
     linger = true;
     description = "OpenClaw service account";
+  };
+
+  # ▸ Hermes Agent (managed by hermes-agent NixOS module)
+  services.hermes-agent = {
+    enable = true;
+    container.enable = true;
+    container.image = "ubuntu:26.04";
+    container.hostUsers = [ "aleroza" ];
+    container.extraOptions = [
+      "--env"
+      "HTTP_PROXY=http://127.0.0.1:7890"
+      "--env"
+      "HTTPS_PROXY=http://127.0.0.1:7890"
+      "--env"
+      "ALL_PROXY=http://127.0.0.1:7890"
+      "--env"
+      "http_proxy=http://127.0.0.1:7890"
+      "--env"
+      "https_proxy=http://127.0.0.1:7890"
+      "--env"
+      "all_proxy=http://127.0.0.1:7890"
+      "--env"
+      "NO_PROXY=127.0.0.1,localhost,::1"
+      "--env"
+      "no_proxy=127.0.0.1,localhost,::1"
+    ];
+    addToSystemPackages = true;
+    environmentFiles = [ "/run/secrets/hermes/env" ];
+    environment = {
+      HTTP_PROXY = "http://127.0.0.1:7890";
+      HTTPS_PROXY = "http://127.0.0.1:7890";
+      ALL_PROXY = "http://127.0.0.1:7890";
+      http_proxy = "http://127.0.0.1:7890";
+      https_proxy = "http://127.0.0.1:7890";
+      all_proxy = "http://127.0.0.1:7890";
+      NO_PROXY = "127.0.0.1,localhost,::1";
+      no_proxy = "127.0.0.1,localhost,::1";
+    };
+    settings.model = "minimax/MiniMax-M3";
+    settings.toolsets = [ "all" ];
+
+    # ── Workaround: upstream wheel omits hermes_state_common.py etc.
+    #   pyproject.toml only ships hermes_state.py as a package, so the
+    #   sibling modules (common, portability, schema, search) are missing
+    #   in the wheel and ModuleNotFoundError fires at runtime. We patch
+    #   the wrapped venv post-install by copying them from pythonSrc into
+    #   site-packages so the imports resolve.
+    package =
+      let
+        basePkg = hermes-agent.packages.x86_64-linux.default;
+        pythonSrc = basePkg.hermesNpmLib.pythonSrc;
+        venv = basePkg.hermesVenv;
+      in
+      basePkg.overrideAttrs (old: {
+        # Wrap the makeWrapper'd bin scripts so we can prepend a writable
+        # site-packages dir to PYTHONPATH without mutating the read-only
+        # store paths in the upstream venv.
+        postInstall = (old.postInstall or "") + ''
+          mkdir -p $out/lib/python3.12/site-packages
+          for mod in hermes_state_common hermes_state_portability hermes_state_schema hermes_state_search; do
+            if [ -f "${pythonSrc}/$mod.py" ]; then
+              cp -f "${pythonSrc}/$mod.py" "$out/lib/python3.12/site-packages/$mod.py"
+            fi
+          done
+          # Re-wrap each hermes entry-point to inject the patched site-packages
+          # on PYTHONPATH, so Python finds our copies before the wheel's.
+          for bin in hermes hermes-agent hermes-acp; do
+            if [ -x "$out/bin/$bin" ]; then
+              wrapProgram "$out/bin/$bin" \
+                --prefix PYTHONPATH : "$out/lib/python3.12/site-packages"
+            fi
+          done
+        '';
+      });
   };
 
   # ▸ Shell-алиасы

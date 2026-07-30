@@ -7,6 +7,7 @@
     home-manager.url = "github:nix-community/home-manager/release-26.05";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
     nix-flatpak.url = "github:gmodena/nix-flatpak?ref=v0.7.0";
+    sops-nix.url = "github:Mic92/sops-nix";
 
     hermes-agent = {
       url = "github:NousResearch/hermes-agent";
@@ -39,6 +40,7 @@
       nixpkgs-unstable,
       home-manager,
       nix-flatpak,
+      sops-nix,
       hermes-agent,
       ...
     }:
@@ -51,7 +53,7 @@
         nixpkgs.lib.nixosSystem {
           inherit system;
           specialArgs = {
-            inherit self nix-flatpak nixpkgs-unstable;
+            inherit self nix-flatpak nixpkgs-unstable hermes-agent;
           };
           modules = [
             ./modules/revision.nix
@@ -60,6 +62,7 @@
             ./modules/default.nix
             home-manager.nixosModules.home-manager
             nix-flatpak.nixosModules.nix-flatpak
+            sops-nix.nixosModules.sops
             hermes-agent.nixosModules.default
             ./users/default.nix
           ];

@@ -1,0 +1,88 @@
+# SOPS rules for hosts/aleroza-pc. sops picks this file up automatically
+# when run from inside hosts/aleroza-pc/, otherwise point SOPS_CONFIG
+# to it explicitly:
+#
+#   export SOPS_CONFIG=$(pwd)/.sops.yaml   # from inside this directory
+#   # or, from anywhere:
+#   #   export SOPS_CONFIG=/absolute/path/to/hosts/aleroza-pc/.sops.yaml
+#
+# The NixOS host config also sets SOPS_CONFIG in the user environment,
+# so on aleroza-pc this is automatic once you re-login.
+#
+# Layout (kept under hosts/aleroza-pc/ so the rules travel with the host):
+#
+#   hosts/aleroza-pc/.sops.yaml
+#   hosts/aleroza-pc/secrets/hosts/aleroza-pc/...   # host-only
+#   hosts/aleroza-pc/secrets/shared/...             # host + users
+#   hosts/aleroza-pc/secrets/users/<u>/...          # host + user-<u> + admin
+#
+# 1. Generate the host key (one per NixOS host):
+#      sudo mkdir -p /etc/sops/age
+#      sudo age-keygen -o /etc/sops/age/key.age
+#      sudo chmod 0400 /etc/sops/age/key.age
+#      age-keygen -y /etc/sops/age/key.age
+#    Paste the resulting age1... into the `&aleroza-pc` key below.
+#
+# 2. Generate a personal key for each operator:
+#      mkdir -p ~/.config/sops/age
+#      age-keygen -o ~/.config/sops/age/keys.txt
+#      age-keygen -y ~/.config/sops/age/keys.txt
+#    Paste the resulting age1... into the matching `&user-*` key.
+#
+# 3. Encrypt a new user bundle (first time, when the file does not exist):
+#      HASH=$(echo 'YOUR_PASSWORD' | mkpasswd -s -m yescrypt -)
+#      sops encrypt --filename-override \
+#        secrets/users/aleroza.yaml \
+#        --input-type yaml --output-type yaml /dev/stdin \
+#        <<< "aleroza:
+#            password: $HASH" \
+#        > secrets/users/aleroza.yaml
+#    `path_regex` matches the override path, recipients come from this file.
+#
+# 4. Edit an already-encrypted secret (opens $EDITOR with decrypted data):
+#      sops edit secrets/users/aleroza.yaml
+#    Add new fields under `aleroza:` and save; the corresponding NixOS
+#    `sops.secrets."aleroza/<name>"` will start working after rebuild.
+#
+# 5. After changing this file (rotating a key, adding a recipient):
+#      sops update-keys --yes secrets/users/aleroza.yaml
+
+keys:
+  # ── Per-host keys (one per NixOS host) ─────────────────────────────
+  - &aleroza-pc age1xdd3f4jjeh3qmtghl5pglall79ypjjht8ngz47fpe60a4mdrypas4wkn3y
+
+  # ── Per-user keys (one per operator) ───────────────────────────────
+  - &user-aleroza age1a6xguq3m3knx2jq8y2d70tkgjnnf96909xh8yg9yta7u29qd0stsjjqavm
+  # &user-openclaw — add when openclaw has its own age key (placeholder
+  # below blocks sops config validation; commented out until then).
+  # - &user-openclaw age1_rePLACE_WITH_OPENCLAW_PUBLIC_KEY
+
+creation_rules:
+  # Host-only secrets: only the host key.
+  - path_regex: secrets/hosts/aleroza-pc/[^/]+\.yaml$
+    key_groups:
+      - age:
+          - *aleroza-pc
+
+  # Shared secrets: host + operators.
+  - path_regex: secrets/shared/[^/]+\.yaml$
+    key_groups:
+      - age:
+          - *aleroza-pc
+          - *user-aleroza
+
+  # Per-user secrets: one file per user
+  # (secrets/users/<u>.yaml, containing nested keys).
+  - path_regex: secrets/users/aleroza(/.*)?\.yaml$
+    key_groups:
+      - age:
+          - *aleroza-pc
+          - *user-aleroza
+
+  # Mirror rule for openclaw — uncomment after generating its age key
+  # and adding &user-openclaw under `keys:` above.
+  # - path_regex: secrets/users/openclaw(/.*)?\.yaml$
+  #   key_groups:
+  #     - age:
+  #         - *aleroza-pc
+  #         - *user-openclaw

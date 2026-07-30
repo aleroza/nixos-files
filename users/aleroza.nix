@@ -31,7 +31,10 @@
     export HISTIGNORE=" *"
     export HISTSIZE=10000
     export HISTFILESIZE=20000
+    export EDITOR=vim
   '';
+
+  home.sessionVariables.EDITOR = "vim";
 
   # ── Git ─────────────────────────────────────────────────────────
   programs.git = {

@@ -4,6 +4,7 @@
   imports = [
     ./base
     ./security/fail2ban.nix
+    ./security/sops.nix
     ./flatpak.nix
     ./xserver.nix
     ./gnome
