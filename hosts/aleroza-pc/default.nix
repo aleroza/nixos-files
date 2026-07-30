@@ -342,131 +342,90 @@
   };
 
   # ▸ Hermes-triggered system activation (NNP-safe).
-  # Root systemd unit + path trigger so hermes can switch generations
-  # without sudo / without disabling NNP on hermes-agent.service.
-  # See hosts/aleroza-pc/README.md for the full workflow and rationale.
-  systemd.services.nixos-activate = {
-    description = "Hermes-triggered nixos-rebuild switch (allowlisted)";
-    wantedBy = [ ];
-    wants = [ "network-online.target" ];
-    after = [ "network-online.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      User = "root";
-      NoNewPrivileges = false;
-      ProtectSystem = "full";
-      ProtectHome = true;
-      PrivateTmp = true;
-      ReadWritePaths = [
-        "/var/lib/hermes/workspace/nixos-files"
-        "/nix/store"
-        "/var/run"
-      ];
-      RuntimeDirectory = "nixos-activate";
-    };
-    # systemd units inherit a minimal PATH from systemd (coreutils, sed,
-    # grep, findutils only — no git, no nixos-rebuild). Re-export the
-    # full system PATH at the top of the script so the body can call
-    # git, nixos-rebuild, flock, date without absolute paths.
+    # Root systemd unit + path trigger so hermes can switch generations
+    # without sudo / without disabling NNP on hermes-agent.service.
     #
-    # Also set HOME=/var/root explicitly: root systemd units have no
-    # HOME, and bare `git diff` fails with "Could not access 'HEAD'"
-    # (exit 1) when HOME is unset, which the dirty-tree check would
-    # then misread as "uncommitted changes" (exit 2).
+    # Workflow:
+    #   1. Hermes edits the flake and commits.
+    #   2. Hermes runs `nix build` itself (as hermes, nixbld group) to
+    #      produce the system closure in /nix/store.
+    #   3. Hermes writes the closure path to
+    #      /var/lib/hermes/workspace/.pending-switch.
+    #   4. Hermes touches /var/lib/hermes/workspace/.switch-request.
+    #   5. systemd.paths triggers nixos-activate.service.
+    #   6. The service (as root, NNP=false) reads .pending-switch and
+    #      runs switch-to-configuration against that closure.
     #
-    # ExecStartPre opens up read access on the .git directory for the
-    # duration of the service. .git is hermes:hermes 2770 by default;
-    # root would still normally read it via DAC_OVERRIDE, but
-    # ProtectSystem=full sometimes strips that capability, depending on
-    # how systemd sets up the namespace. chmod is more predictable.
-    script = ''
-      export PATH=/run/current-system/sw/bin
-      export HOME=/var/root
-      set -euo pipefail
-      FLAKE_DIR=/var/lib/hermes/workspace/nixos-files
-      REQUEST=/var/lib/hermes/workspace/.switch-request
+    # The service does NOT build — the closure must already exist in
+    # /nix/store. If the build fails, hermes catches it before
+    # touching the request flag. See hosts/aleroza-pc/README.md.
+    systemd.services.nixos-activate = {
+      description = "Hermes-triggered nixos-rebuild activate (allowlisted)";
+      wantedBy = [ ];
+      wants = [ "network-online.target" ];
+      after = [ "network-online.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        User = "root";
+        NoNewPrivileges = false;
+        ProtectSystem = "full";
+        ProtectHome = true;
+        PrivateTmp = true;
+        ReadWritePaths = [
+          "/var/lib/hermes/workspace/nixos-files"
+          "/nix/store"
+          "/var/run"
+        ];
+        RuntimeDirectory = "nixos-activate";
+      };
+      script = ''
+        export PATH=/run/current-system/sw/bin
+        export HOME=/var/root
+        set -euo pipefail
 
-      [ -d "$FLAKE_DIR" ] || { echo "no flake dir at $FLAKE_DIR" >&2; rm -f "$REQUEST"; exit 1; }
-      cd "$FLAKE_DIR"
+        WORKSPACE=/var/lib/hermes/workspace
+        REQUEST="$WORKSPACE/.switch-request"
+        PENDING="$WORKSPACE/.pending-switch"
 
-      # Tooling check — fail with a distinct code if git is missing
-      # rather than silently treating "command not found" as dirty tree.
-      command -v git    >/dev/null || { echo "git not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
-      command -v nixos-rebuild >/dev/null || { echo "nixos-rebuild not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
-      command -v runuser >/dev/null || { echo "runuser not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
+        # Tooling check.
+        command -v flock >/dev/null || { echo "flock not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
 
-      # Refuse to activate from a dirty tree. Run git as hermes so we
-      # don't depend on root being able to read .git (hermes:hermes,
-      # mode 2770). runuser works from root without NNP restrictions
-      # because the unit has NoNewPrivileges=false.
-      #
-      # git diff --quiet exit codes:
-      #   0 = no changes (clean)
-      #   1 = uncommitted changes (dirty)
-      #   2+ = real error
-      git_rc=0
-      runuser -u hermes -- env HOME=/var/lib/hermes PATH=/run/current-system/sw/bin \
-        git diff --quiet HEAD -- . || git_rc=$?
-      if [ "$git_rc" -eq 1 ]; then
-        echo "uncommitted changes in $FLAKE_DIR; refusing" >&2
-        rm -f "$REQUEST"
-        exit 2
-      fi
-      if [ "$git_rc" -ne 0 ]; then
-        echo "git diff failed with unexpected exit $git_rc" >&2
-        rm -f "$REQUEST"
-        exit 5
-      fi
+        # Lock against concurrent activations.
+        LOCK=/run/nixos-activate/lock
+        exec 9>"$LOCK"
+        if ! flock -n 9; then
+          echo "another activation in progress" >&2
+          rm -f "$REQUEST"
+          exit 3
+        fi
 
-      # Lock around concurrent switches.
-      LOCK=/run/nixos-activate/lock
-      exec 9>"$LOCK"
-      if ! flock -n 9; then
-        echo "another switch already in progress" >&2
-        rm -f "$REQUEST"
-        exit 3
-      fi
+        # Read the closure path that hermes built and stamped into
+        # .pending-switch. Refuse if missing or doesn't look like a
+        # /nix/store path.
+        [ -f "$PENDING" ] || { echo "no pending switch at $PENDING" >&2; rm -f "$REQUEST"; exit 7; }
+        CLOSURE=$(cat "$PENDING")
+        case "$CLOSURE" in
+          /nix/store/*-nixos-system-aleroza-pc-*) ;;
+          *) echo "pending switch points to unexpected path: $CLOSURE" >&2; rm -f "$REQUEST" "$PENDING"; exit 8 ;;
+        esac
+        [ -x "$CLOSURE/bin/switch-to-configuration" ] || { echo "no switch-to-configuration in $CLOSURE" >&2; rm -f "$REQUEST" "$PENDING"; exit 9; }
 
-      GEN="hermes-$(date +%Y%m%d-%H%M%S)"
-      echo "activating generation $GEN"
+        GEN="hermes-$(date +%Y%m%d-%H%M%S)"
+        echo "activating generation $GEN from $CLOSURE"
 
-      # Two-step switch:
-      #
-      # 1. Build the new system closure as hermes. libgit2 (used by
-      #    nix flake) refuses to open a repository not owned by the
-      #    current user, so this MUST run as the .git owner. hermes
-      #    is in nixbld so it can write to /nix/store via nix-daemon.
-      #
-      # 2. Activate the built closure as root. nixos-rebuild's final
-      #    step (set /run/current-system, update boot loader) needs
-      #    real root, not a delegated capability.
-      #
-      # --profile-name picks a unique system profile so this can be
-      # rolled back via nixos-rebuild switch --rollback or systemd-boot.
-      echo "step 1/2: building as hermes"
-      BUILD_OUT=$(runuser -u hermes -- env \
-        HOME=/var/lib/hermes \
-        PATH=/run/current-system/sw/bin \
-        NIX_CONFIG="experimental-features = nix-command flakes" \
-        nix --extra-experimental-features 'nix-command flakes' build \
-          --print-out-paths --no-link \
-          "/var/lib/hermes/workspace/nixos-files#nixosConfigurations.aleroza-pc.config.system.build.toplevel") \
-        || { echo "build failed" >&2; exit 6; }
+        "$CLOSURE/bin/switch-to-configuration" switch
 
-      echo "step 2/2: activating as root"
-      "$BUILD_OUT/bin/switch-to-configuration" switch
-
-      rc=$?
-      rm -f "$REQUEST"
-      exit $rc
-    '';
-  };
-
-  systemd.paths.nixos-activate-trigger = {
-    pathConfig = {
-      PathExists = "/var/lib/hermes/workspace/.switch-request";
-      Unit = "nixos-activate.service";
+        rc=$?
+        rm -f "$REQUEST" "$PENDING"
+        exit $rc
+      '';
     };
-    wantedBy = [ "paths.target" ];
-  };
-}
+
+    systemd.paths.nixos-activate-trigger = {
+      pathConfig = {
+        PathExists = "/var/lib/hermes/workspace/.switch-request";
+        Unit = "nixos-activate.service";
+      };
+      wantedBy = [ "paths.target" ];
+    };
+  }
