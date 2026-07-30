@@ -400,18 +400,24 @@
       command -v nixos-rebuild >/dev/null || { echo "nixos-rebuild not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
 
       # Refuse to activate from a dirty tree. We rely on root being able
-      # to read .git via DAC_OVERRIDE; the ExecStartPre chmod ensures
-      # that ability even if namespace protection downgrades it.
-      if ! git diff --quiet HEAD -- .; then
-        rc=$?
-        if [ "$rc" -ne 1 ]; then
-          echo "git diff failed with unexpected exit $rc" >&2
-          rm -f "$REQUEST"
-          exit 5
-        fi
+      # to read .git via DAC_OVERRIDE; the preStart chmod ensures that
+      # ability even if namespace protection downgrades it.
+      #
+      # git diff --quiet exit codes:
+      #   0 = no changes (clean)
+      #   1 = uncommitted changes (dirty)
+      #   2+ = real error
+      git_rc=0
+      git diff --quiet HEAD -- . || git_rc=$?
+      if [ "$git_rc" -eq 1 ]; then
         echo "uncommitted changes in $FLAKE_DIR; refusing" >&2
         rm -f "$REQUEST"
         exit 2
+      fi
+      if [ "$git_rc" -ne 0 ]; then
+        echo "git diff failed with unexpected exit $git_rc" >&2
+        rm -f "$REQUEST"
+        exit 5
       fi
 
       # Lock around concurrent switches.
