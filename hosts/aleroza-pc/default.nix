@@ -361,14 +361,6 @@
       ];
       RuntimeDirectory = "nixos-activate";
     };
-    # ExecStartPre opens up read access on the .git directory for the
-    # duration of the service. .git is hermes:hermes 2770 by default;
-    # root would still normally read it via DAC_OVERRIDE, but
-    # ProtectSystem=full sometimes strips that capability, depending on
-    # how systemd sets up the namespace. chmod o+rX is more predictable.
-    preStart = ''
-      chmod -R u+rwX,g+rX,o+rX /var/lib/hermes/workspace/nixos-files/.git
-    '';
     # systemd units inherit a minimal PATH from systemd (coreutils, sed,
     # grep, findutils only — no git, no nixos-rebuild). Re-export the
     # full system PATH at the top of the script so the body can call
@@ -398,17 +390,20 @@
       # rather than silently treating "command not found" as dirty tree.
       command -v git    >/dev/null || { echo "git not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
       command -v nixos-rebuild >/dev/null || { echo "nixos-rebuild not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
+      command -v runuser >/dev/null || { echo "runuser not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
 
-      # Refuse to activate from a dirty tree. We rely on root being able
-      # to read .git via DAC_OVERRIDE; the preStart chmod ensures that
-      # ability even if namespace protection downgrades it.
+      # Refuse to activate from a dirty tree. Run git as hermes so we
+      # don't depend on root being able to read .git (hermes:hermes,
+      # mode 2770). runuser works from root without NNP restrictions
+      # because the unit has NoNewPrivileges=false.
       #
       # git diff --quiet exit codes:
       #   0 = no changes (clean)
       #   1 = uncommitted changes (dirty)
       #   2+ = real error
       git_rc=0
-      git diff --quiet HEAD -- . || git_rc=$?
+      runuser -u hermes -- env HOME=/var/lib/hermes PATH=/run/current-system/sw/bin \
+        git diff --quiet HEAD -- . || git_rc=$?
       if [ "$git_rc" -eq 1 ]; then
         echo "uncommitted changes in $FLAKE_DIR; refusing" >&2
         rm -f "$REQUEST"
