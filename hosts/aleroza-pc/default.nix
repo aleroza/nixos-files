@@ -361,6 +361,14 @@
       ];
       RuntimeDirectory = "nixos-activate";
     };
+    # ExecStartPre opens up read access on the .git directory for the
+    # duration of the service. .git is hermes:hermes 2770 by default;
+    # root would still normally read it via DAC_OVERRIDE, but
+    # ProtectSystem=full sometimes strips that capability, depending on
+    # how systemd sets up the namespace. chmod o+rX is more predictable.
+    preStart = ''
+      chmod -R u+rwX,g+rX,o+rX /var/lib/hermes/workspace/nixos-files/.git
+    '';
     # systemd units inherit a minimal PATH from systemd (coreutils, sed,
     # grep, findutils only — no git, no nixos-rebuild). Re-export the
     # full system PATH at the top of the script so the body can call
@@ -370,6 +378,12 @@
     # HOME, and bare `git diff` fails with "Could not access 'HEAD'"
     # (exit 1) when HOME is unset, which the dirty-tree check would
     # then misread as "uncommitted changes" (exit 2).
+    #
+    # ExecStartPre opens up read access on the .git directory for the
+    # duration of the service. .git is hermes:hermes 2770 by default;
+    # root would still normally read it via DAC_OVERRIDE, but
+    # ProtectSystem=full sometimes strips that capability, depending on
+    # how systemd sets up the namespace. chmod is more predictable.
     script = ''
       export PATH=/run/current-system/sw/bin
       export HOME=/var/root
@@ -385,8 +399,16 @@
       command -v git    >/dev/null || { echo "git not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
       command -v nixos-rebuild >/dev/null || { echo "nixos-rebuild not in PATH" >&2; rm -f "$REQUEST"; exit 4; }
 
-      # Refuse to activate from a dirty tree.
+      # Refuse to activate from a dirty tree. We rely on root being able
+      # to read .git via DAC_OVERRIDE; the ExecStartPre chmod ensures
+      # that ability even if namespace protection downgrades it.
       if ! git diff --quiet HEAD -- .; then
+        rc=$?
+        if [ "$rc" -ne 1 ]; then
+          echo "git diff failed with unexpected exit $rc" >&2
+          rm -f "$REQUEST"
+          exit 5
+        fi
         echo "uncommitted changes in $FLAKE_DIR; refusing" >&2
         rm -f "$REQUEST"
         exit 2
