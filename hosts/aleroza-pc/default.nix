@@ -349,13 +349,14 @@
       Type = "oneshot";
       User = "root";
       NoNewPrivileges = false;
-      ProtectSystem = "full";
-      ProtectHome = true;
+      ProtectSystem = "off";
+      ProtectHome = false;
       PrivateTmp = true;
       ReadWritePaths = [
         "/var/lib/hermes/workspace/nixos-files"
         "/nix/store"
         "/var/run"
+        "/boot"
       ];
       RuntimeDirectory = "nixos-activate";
     };
