@@ -196,7 +196,10 @@
 
   # ▸ Hermes (system user, created by hermes-agent NixOS module).
   # See hosts/aleroza-pc/README.md for full rationale.
-  users.users.hermes.extraGroups = [ "nixbld" ];
+  users.users.hermes.extraGroups = [
+    "nixbld"
+    "systemd-journal"
+  ];
 
   # ▸ Hermes Agent (managed by hermes-agent NixOS module)
   services.hermes-agent = {
