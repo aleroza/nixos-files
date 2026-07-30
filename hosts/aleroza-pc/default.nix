@@ -365,8 +365,14 @@
     # grep, findutils only — no git, no nixos-rebuild). Re-export the
     # full system PATH at the top of the script so the body can call
     # git, nixos-rebuild, flock, date without absolute paths.
+    #
+    # Also set HOME=/var/root explicitly: root systemd units have no
+    # HOME, and bare `git diff` fails with "Could not access 'HEAD'"
+    # (exit 1) when HOME is unset, which the dirty-tree check would
+    # then misread as "uncommitted changes" (exit 2).
     script = ''
       export PATH=/run/current-system/sw/bin
+      export HOME=/var/root
       set -euo pipefail
       FLAKE_DIR=/var/lib/hermes/workspace/nixos-files
       REQUEST=/var/lib/hermes/workspace/.switch-request
