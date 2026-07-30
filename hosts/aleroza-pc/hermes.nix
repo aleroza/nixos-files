@@ -158,7 +158,33 @@
       GEN="hermes-$(date +%Y%m%d-%H%M%S)"
       echo "activating generation $GEN from $CLOSURE"
 
-      "$CLOSURE/bin/switch-to-configuration" switch
+      # Delegate the switch to a transient systemd unit and exit
+      # cleanly. switch-to-configuration's final stage stops all
+      # active systemd units during activation — including this
+      # service itself. Running it directly inside our ExecStart
+      # gives us status=15/TERM in journalctl even when the
+      # activation succeeds (system profile flipped, bootloader
+      # entry written, current-system symlink updated).
+      #
+      # By handing off to systemd-run, our service exits 0 as soon
+      # as the transient unit is queued, and the actual switch
+      # runs in its own cgroup outside our lifecycle. The transient
+      # unit isn't a child of nixos-activate.service, so when
+      # switch-to-configuration stops "all units" it isn't killing
+      # us — we're already gone.
+      #
+      # Trade-off: failure of the switch-to-configuration step
+      # doesn't propagate back to the trigger flag (we already
+      # rm -f'd it). Hermes watches the transient unit's journal
+      # via journalctl -u "hermes-switch-*" for outcome.
+      TRANSIENT="hermes-switch-$(date +%s)-$$"
+      systemd-run \
+        --unit="$TRANSIENT" \
+        --description="Hermes-triggered switch-to-configuration for $GEN" \
+        --no-block \
+        --collect \
+        --setenv=GEN="$GEN" \
+        "$CLOSURE/bin/switch-to-configuration" switch
 
       rc=$?
       rm -f "$REQUEST" "$PENDING"
