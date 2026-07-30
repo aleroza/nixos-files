@@ -243,6 +243,7 @@
     vim
     wget
     htop
+    btop
     parted
     fastfetch
     git
@@ -349,6 +350,14 @@
       Type = "oneshot";
       User = "root";
       RuntimeDirectory = "nixos-activate";
+      # Hermes supervises activations — failed activations are visible
+      # via journalctl and a stale .pending-switch. systemd's default
+      # start-limit (5 in 10s) bites when we're iterating fast on
+      # a broken config: the path unit then sits in
+      # unit-start-limit-hit and stops firing until someone resets
+      # it by hand. Disable both rate limits entirely.
+      StartLimitIntervalSec = 0;
+      StartLimitBurst = 0;
     };
     script = ''
       export PATH=/run/current-system/sw/bin
@@ -398,6 +407,11 @@
       PathExists = "/var/lib/hermes/workspace/.switch-request";
       Unit = "nixos-activate.service";
     };
+    # Disable the path unit's trigger rate limit too. Default is
+    # 200 triggers per 10s; harmless in normal use, but combined
+    # with the service start-limit above it makes "stuck after a
+    # failure" very easy to hit during iteration.
+    unitConfig.TriggerLimitIntervalSec = 0;
     wantedBy = [ "paths.target" ];
   };
 }
