@@ -427,10 +427,31 @@
       GEN="hermes-$(date +%Y%m%d-%H%M%S)"
       echo "activating generation $GEN"
 
-      nixos-rebuild switch \
-        --flake "/var/lib/hermes/workspace/nixos-files#aleroza-pc" \
-        --install-bootloader \
-        --profile-name "$GEN"
+      # Two-step switch:
+      #
+      # 1. Build the new system closure as hermes. libgit2 (used by
+      #    nix flake) refuses to open a repository not owned by the
+      #    current user, so this MUST run as the .git owner. hermes
+      #    is in nixbld so it can write to /nix/store via nix-daemon.
+      #
+      # 2. Activate the built closure as root. nixos-rebuild's final
+      #    step (set /run/current-system, update boot loader) needs
+      #    real root, not a delegated capability.
+      #
+      # --profile-name picks a unique system profile so this can be
+      # rolled back via nixos-rebuild switch --rollback or systemd-boot.
+      echo "step 1/2: building as hermes"
+      BUILD_OUT=$(runuser -u hermes -- env \
+        HOME=/var/lib/hermes \
+        PATH=/run/current-system/sw/bin \
+        NIX_CONFIG="experimental-features = nix-command flakes" \
+        nix --extra-experimental-features 'nix-command flakes' build \
+          --print-out-paths --no-link \
+          "/var/lib/hermes/workspace/nixos-files#nixosConfigurations.aleroza-pc.config.system.build.toplevel") \
+        || { echo "build failed" >&2; exit 6; }
+
+      echo "step 2/2: activating as root"
+      "$BUILD_OUT/bin/switch-to-configuration" switch
 
       rc=$?
       rm -f "$REQUEST"
