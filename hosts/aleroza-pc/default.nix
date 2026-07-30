@@ -347,10 +347,6 @@
     wantedBy = [ ];
     wants = [ "network-online.target" ];
     after = [ "network-online.target" ];
-    # Root unit gets a minimal PATH from systemd by default (no git,
-    # no nixos-rebuild). Re-inject the system PATH so the script can
-    # call git, nixos-rebuild, flock, date without absolute paths.
-    environment.PATH = "/run/current-system/sw/bin";
     serviceConfig = {
       Type = "oneshot";
       User = "root";
@@ -365,7 +361,12 @@
       ];
       RuntimeDirectory = "nixos-activate";
     };
+    # systemd units inherit a minimal PATH from systemd (coreutils, sed,
+    # grep, findutils only — no git, no nixos-rebuild). Re-export the
+    # full system PATH at the top of the script so the body can call
+    # git, nixos-rebuild, flock, date without absolute paths.
     script = ''
+      export PATH=/run/current-system/sw/bin
       set -euo pipefail
       FLAKE_DIR=/var/lib/hermes/workspace/nixos-files
       REQUEST=/var/lib/hermes/workspace/.switch-request
