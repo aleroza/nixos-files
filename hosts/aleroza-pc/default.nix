@@ -138,6 +138,9 @@
   #   переопределяют только то, что отличается.
   #
   #   Hermes env file lives in hermes.nix (separate ownership).
+  #   OpenViking reuses the GOOGLE_API_KEY line from the same
+  #   hermes/env secret via services.openviking.apiKeyFile —
+  #   no second sops secret needed.
   sops.secrets =
     let
       alerozaSecret =

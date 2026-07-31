@@ -43,6 +43,25 @@ let
     level = "info"
   '');
   openvikingImage = "openviking/openviking:v0.4.11.dev23";
+  # OpenViking reads its config from ~/.openviking/ov.conf (the
+  # home dir of whatever user the container runs as — root by
+  # default for our oci-containers setup, but OpenViking may
+  # have a non-root entrypoint; in either case it ends up under
+  # /root/.openviking/ov.conf or /.openviking/ov.conf). The data
+  # dir gets bind-mounted at /data; we want the config to live
+  # alongside the data so it survives container restarts and
+  # can be inspected from the host. The /data volume is mounted
+  # rw, so writing /data/.openviking/ov.conf inside the
+  # container persists.
+  #
+  # We pre-create the JSON config from a Nix attrset rather than
+  # running `openviking-server init` interactively. The init
+  # wizard requires a TTY and asks for API keys in plaintext —
+  # not workable from a systemd unit. We render the JSON
+  # straight from the option values, with api_key sourced from
+  # the sops-managed secret at /run/secrets/openviking/api_key
+  # (same pattern as hermes/env).
+  ovConfigFile = cfg.ovConfig;
 in
 {
   options.services.openviking = {
@@ -83,15 +102,73 @@ in
         firewall rules are normally unnecessary.
       '';
     };
+
+    # Provider configuration. Defaults assume the Gemini family
+    # (free tier) — embedding via the dedicated Gemini Embedding
+    # endpoint, VLM via Google AI Studio's OpenAI-compatible
+    # surface (works because Google exposes `/v1beta/openai/` on
+    # the same host). The apiKeyFile points to a sops-managed
+    # secret so the key never lands in the Nix store.
+    ovConfig = lib.mkOption {
+      type = lib.types.attrs;
+      default = {
+        storage = {
+          workspace = "/data";
+          vectordb = {
+            name = "context";
+            backend = "local";
+          };
+          agfs = {
+            backend = "local";
+          };
+        };
+        embedding = {
+          dense = {
+            provider = "gemini";
+            api_key = "__read_from_file__";
+            model = "gemini-embedding-2-preview";
+            dimension = 3072;
+          };
+        };
+        vlm = {
+          api_key = "__read_from_file__";
+          api_base = "https://generativelanguage.googleapis.com/v1beta/openai/";
+          provider = "openai";
+          model = "gemini-2.0-flash";
+        };
+      };
+      description = ''
+        The ~/.openviking/ov.conf JSON config. Must include
+        `embedding.dense.provider` (gemini | openai | ollama | …)
+        and `vlm.provider`. api_key placeholders
+        `__read_from_file__` are substituted at runtime from
+        `services.openviking.apiKeyFile`.
+      '';
+    };
+
+    apiKeyFile = lib.mkOption {
+      type = lib.types.path;
+      default = /run/secrets/hermes/env;
+      description = ''
+        Path to a file containing the Google AI Studio API key.
+        The file is read at unit start; the first non-empty
+        line is used as the api_key. Default points at the
+        existing hermes/env sops secret which contains
+        GOOGLE_API_KEY on its own line — reuse that rather than
+        provisioning a second secret.
+      '';
+    };
   };
 
+  # Render the JSON config with the api_key filled in at
+  # activation time (so changing apiKeyFile doesn't require a
+  # rebuild — just an activation). We DON'T add a Nix assertion
+  # for apiKeyFile existing at build time — that would prevent
+  # building the configuration before the secret is provisioned.
+  # Instead, the systemd unit that renders the config (below)
+  # fails fast at start time if the file is missing.
   config = lib.mkIf autoCfg.enable {
 
-    # Hard dependency on Docker (or podman) — there's no point
-    # running a container without a daemon. virtualisation.oci-containers
-    # itself enables podman by default, but we anchor on the
-    # auto.docker flag because that's what the host owner
-    # already configures.
     assertions = [
       {
         assertion = config.auto.docker.enable;
@@ -114,15 +191,16 @@ in
       ports = [ "127.0.0.1:${toString cfg.port}:${toString cfg.port}" ];
       volumes = [
         "${cfg.dataDir}:/data"
-        "/etc/openviking/ov.conf:/etc/openviking/ov.conf:ro"
+        "/etc/openviking/ov.conf:/data/.openviking/ov.conf:ro"
       ];
       environment = {
-        # The container's openviking-server reads its config from
-        # /etc/openviking/ov.conf by default.
-        OPENVIKING_CONFIG_FILE = "/etc/openviking/ov.conf";
+        # The container's openviking-server reads its config
+        # from $HOME/.openviking/ov.conf, which under our
+        # mount layout is /data/.openviking/ov.conf.
+        HOME = "/data";
       };
-      # The container expects to write its DB to /data; map that
-      # to the host's dataDir.
+      # The container expects to write its DB to /data; map
+      # that to the host's dataDir.
       workdir = "/data";
     };
 
@@ -142,9 +220,52 @@ in
         RemainAfterExit = true;
         StateDirectory = "openviking";
         StateDirectoryMode = "0755";
-        # Use ${pkgs.coreutils}/bin/true — NixOS has no /bin,
-        # and the bare path /bin/true doesn't exist there.
-        ExecStart = "${pkgs.coreutils}/bin/true";
+        # Render ~/.openviking/ov.conf with the api_key from
+        # apiKeyFile substituted into the placeholder fields.
+        # OpenViking refuses to start without this file, and the
+        # init wizard is interactive (no good way to drive it
+        # from a systemd unit). Render on each start so key
+        # rotation works without a rebuild.
+        #
+        # If apiKeyFile is missing the unit exits with a clear
+        # error message — never silently produces a broken
+        # config. Once the user provisions the sops secret (or
+        # points apiKeyFile elsewhere) and re-runs nixos-rebuild,
+        # the next container start succeeds.
+        ExecStartPre = pkgs.writeShellScript "check-api-key" ''
+          if [ ! -s ${lib.escapeShellArg (toString cfg.apiKeyFile)} ]; then
+            echo "services.openviking.apiKeyFile = ${toString cfg.apiKeyFile}" >&2
+            echo "is missing or empty. Provision a sops secret at" >&2
+            echo "aleroza.yaml:\$openviking/api_key, or change" >&2
+            echo "services.openviking.apiKeyFile to point at a file you own." >&2
+            exit 1
+          fi
+        '';
+        ExecStart = pkgs.writeShellScript "render-ov-conf" ''
+          set -euo pipefail
+          mkdir -p /var/lib/openviking/.openviking
+          # apiKeyFile may be either a raw key (one line, no
+          # prefix) or an env-file with `KEY=VALUE` lines. Handle
+          # both: first try to grep for GOOGLE_API_KEY=, fall back
+          # to reading the whole file as the key.
+          KEY=""
+          if grep -qE '^GOOGLE_API_KEY=' ${lib.escapeShellArg (toString cfg.apiKeyFile)}; then
+            KEY=$(grep -E '^GOOGLE_API_KEY=' ${lib.escapeShellArg (toString cfg.apiKeyFile)} | head -n1 | cut -d= -f2-)
+          else
+            KEY=$(cat ${lib.escapeShellArg (toString cfg.apiKeyFile)})
+          fi
+          if [ -z "$KEY" ]; then
+            echo "No API key found in ${lib.escapeShellArg (toString cfg.apiKeyFile)}" >&2
+            exit 1
+          fi
+          ${pkgs.jq}/bin/jq \
+            --arg key "$KEY" '
+              .embedding.dense.api_key = $key
+              | .vlm.api_key = $key
+            ' ${pkgs.writeText "ov-config-template.json" (builtins.toJSON cfg.ovConfig)} \
+            > /var/lib/openviking/.openviking/ov.conf
+          chmod 0600 /var/lib/openviking/.openviking/ov.conf
+        '';
       };
     };
 
