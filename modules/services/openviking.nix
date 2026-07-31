@@ -48,6 +48,13 @@ let
   # JSON.
   renderConf = pkgs.writeShellScript "render-ov-conf" ''
     set -euo pipefail
+    # systemd's StateDirectory= creates /run/<unitname>/ where
+    # unitname = the service's "name" field. For unit
+    # openviking-server-data-dir.service, that's
+    # /run/openviking-server-data-dir/. We want /run/openviking-server/
+    # because that's the path baked into OPENVIKING_CONF_CONTENT.
+    # So just mkdir it manually.
+    mkdir -p /run/openviking-server
     KEY=""
     SRC=${lib.escapeShellArg (toString cfg.apiKeyFile)}
     if grep -qE '^GOOGLE_API_KEY=' "$SRC"; then
@@ -212,20 +219,14 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        StateDirectory = "openviking-server";
-        StateDirectoryMode = "0755";
-        # Render ~/.openviking/ov.conf with the api_key from
-        # apiKeyFile substituted into the placeholder fields.
-        # OpenViking refuses to start without this file, and the
-        # init wizard is interactive (no good way to drive it
-        # from a systemd unit). Render on each start so key
-        # rotation works without a rebuild.
-        #
-        # If apiKeyFile is missing the unit exits with a clear
-        # error message — never silently produces a broken
-        # config. Once the user provisions the sops secret (or
-        # points apiKeyFile elsewhere) and re-runs nixos-rebuild,
-        # the next container start succeeds.
+        # We need /run/openviking-server/ — the StateDirectory=
+        # machinery would create /run/<unit-name>/ which for this
+        # unit is /run/openviking-server-data-dir/ and not what
+        # OPENVIKING_CONF_CONTENT expects. So do mkdir manually
+        # in render-ov-conf (above) and skip StateDirectory= here.
+        # We don't need a persistent /var/lib/ directory — the
+        # container owns /data via its bind mount and that's
+        # where the actual state lives.
         ExecStartPre = pkgs.writeShellScript "check-api-key" ''
           if [ ! -s ${lib.escapeShellArg (toString cfg.apiKeyFile)} ]; then
             echo "services.openviking.apiKeyFile = ${toString cfg.apiKeyFile}" >&2
