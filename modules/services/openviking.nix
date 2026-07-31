@@ -142,7 +142,9 @@ in
         RemainAfterExit = true;
         StateDirectory = "openviking";
         StateDirectoryMode = "0755";
-        ExecStart = "/bin/true";
+        # Use ${pkgs.coreutils}/bin/true — NixOS has no /bin,
+        # and the bare path /bin/true doesn't exist there.
+        ExecStart = "${pkgs.coreutils}/bin/true";
       };
     };
 
