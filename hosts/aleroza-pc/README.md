@@ -110,6 +110,85 @@ root), триггерится только явным flag-файлом —
 "инициировать switch" от шага "выполнить switch": см. следующую
 секцию.
 
+#### Pipeline end-to-end
+
+Пошаговая инструкция от правки конфига до активации. Каждый шаг
+**обязателен** — пропуск любого из них увеличивает шансы
+перезагрузить сломанную систему или закоммитить нерабочее.
+
+```bash
+# 0. Убедиться, что рабочее дерево чистое, и ты на своей ветке
+git status --short          # должно быть пусто
+git branch --show-current   # не main; обычно feature-ветка
+
+# 1. Правки в любых файлах nixos-files
+
+# 2. Статическая валидация — flake должен вычисляться,
+#    даже если сами derivation'ы ещё не собираются
+nix flake check --no-build
+
+# 3. Dry-build closure — показывает какие derivations пересоберутся,
+#    без фактической сборки. Если что-то evaluate-уровня сломано,
+#    это всплывёт здесь.
+nix build --dry-run \
+  .#nixosConfigurations.aleroza-pc.config.system.build.toplevel
+
+# 4. Если есть сомнения — собрать заранее (не активируя) и
+#    осмотреть вывод. Иначе переходим к шагу 5.
+nix build \
+  .#nixosConfigurations.aleroza-pc.config.system.build.toplevel
+CLOSURE=$(readlink result)
+
+# 5. Коммит + пуш
+git add <files>
+git commit -m "<conventional commit message>"
+git push origin <branch>
+
+# 6. Открыть PR на GitHub, дождаться CI (если есть),
+#    смёржить самому или попросить ревью
+
+# 7. После merge в main: запустить полную сборку closure и
+#    положить в .pending-switch + .switch-request. systemd-run
+#    transient unit заберёт работу на себя.
+nix build \
+  .#nixosConfigurations.aleroza-pc.config.system.build.toplevel
+CLOSURE=$(readlink result)
+echo "$CLOSURE" > /var/lib/hermes/workspace/.pending-switch
+touch /var/lib/hermes/workspace/.switch-request
+
+# 8. Через ~5 секунд проверить, что всё прошло
+sleep 6
+systemctl status nixos-activate.service      # status=0/SUCCESS
+readlink /run/current-system                  # должен совпадать с $CLOSURE
+ls /run/current-system/sw/bin/<expected>     # пакет, который добавляли
+```
+
+**Когда что-то идёт не так:**
+
+- `nix flake check` упал → **не коммитим**, чиним ошибку evaluation.
+  Часто это синтаксическая ошибка в `.nix` или неверное имя опции.
+- `nix build --dry-run` показал неожиданные derivations → подумать,
+  откуда они, прежде чем коммитить. Особенно если это полная
+  пересборка `nixpkgs` (новый `flake.lock` с большим апдейтом).
+- `nix build` (шаг 4 или 7) упал с ошибкой компиляции → коммитим
+  правку, но **не триггерим** switch. В `feat/*` ветке битый
+  closure безопаснее: пока ты не переключишься, текущая система
+  работает.
+- `systemctl status nixos-activate.service` после trigger показывает
+  `status=15/TERM` или `failed` → смотрим `journalctl -u
+  'hermes-switch-*'`; если switch реально не прошёл — `current-system`
+  не обновился, и можно чинить без потерь.
+- `current-system` обновился, но что-то не работает → загрузка в
+  предыдущее поколение через systemd-boot меню или `sudo nixos-rebuild
+  switch --rollback`.
+
+**Что не входит в pipeline:**
+
+- `nix flake update` — делается отдельным коммитом `chore: bump
+  inputs`, проверяется полным rebuild, и только потом merge. Не
+  мешаем апдейт inputs с feature-правками.
+- Тесты, lint, форматирование — отдельная тема; пока их нет.
+
 #### Защитные свойства
 
 - **Без `nixbld`.** У hermes нет прав на произвольную запись в
