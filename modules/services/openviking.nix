@@ -281,7 +281,21 @@ in
       ];
       wants = [ "network-online.target" ];
       serviceConfig = {
-        Type = "simple";
+        # Type=notify because podman's --sdnotify=conmon notifies
+        # systemd when the container is ready. With Type=simple
+        # systemd treats the service as "started" the moment
+        # podman returns from exec — which happens almost
+        # immediately when the container goes into the
+        # background. The notify type waits for the actual
+        # sd_notify READY=1 from conmon before considering the
+        # unit started. Crucially, we MUST NOT use `podman run -d`
+        # because that would background the container and podman
+        # would exit before sdnotify can fire — the right
+        # invocation is foreground `podman run` which stays
+        # running as the unit's PID and forwards sd_notify through
+        # conmon.
+        Type = "notify";
+        NotifyAccess = "main";
         Restart = "always";
         RestartSec = 5;
         # Read the base64-encoded JSON config from
@@ -320,7 +334,6 @@ in
             --log-driver=journald \
             --cgroups=enabled \
             --sdnotify=conmon \
-            -d \
             --replace \
             -e OPENVIKING_CONF_CONTENT="$DECODED" \
             "''${PROXY_ARGS[@]}" \
