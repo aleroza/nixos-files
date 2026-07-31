@@ -54,6 +54,17 @@
     };
     settings.model = "minimax/MiniMax-M3";
     settings.toolsets = [ "all" ];
+    settings.approvals.smartPolicy = ''
+      ESCALATE any command that touches:
+        - /var/lib/hermes/workspace/.switch-request
+        - /var/lib/hermes/workspace/.pending-switch
+      These two files trigger a real NixOS system switch via the
+      nixos-activate.service systemd unit. Touching them is the only
+      step in the hermes pipeline that materially changes the running
+      system; everything else (commit, push, build, dry-run, flake check)
+      is reversible without sudo. The user explicitly wants to approve
+      the switch step itself.
+    '';
 
     # Fix "ModuleNotFoundError: No module named 'hermes_state_common'"
     package =
