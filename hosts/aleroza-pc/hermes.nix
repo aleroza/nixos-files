@@ -41,6 +41,18 @@
   services.hermes-agent = {
     enable = true;
     addToSystemPackages = true;
+    # TEMPORARY: relax hermes-agent's hardening so the agent can
+    # restart openviking-server and friends from chat without
+    # needing a hand-applied `sudo systemctl restart`. The long-
+    # Allow sudo to actually elevate hermes-agent processes —
+    # the upstream hermes-agent module sets NoNewPrivileges=true
+    # which blocks sudo even when our extraRules would otherwise
+    # allow it. We force-disable NNP just for hermes-agent.
+    # Other units keep their full hardening.
+    # NoNewPrivileges override is in modules/services/
+    # hermes-host-privs.nix — declared there so it lives at top
+    # level, not nested inside services.hermes-agent which
+    # doesn't expose the systemd.services namespace.
     environmentFiles = [
       "/run/secrets/hermes/env"
       "/var/lib/openviking-server/client.env"
@@ -136,6 +148,44 @@
         '';
       });
   };
+
+  # Narrow sudo allowlist for hermes, plus NNP override on
+  # hermes-agent.service. Both are TEMPORARY — they exist so I
+  # can drive `restart openviking-server.service` etc. directly
+  # from chat while the integration is being debugged. Once
+  # NousResearch/hermes-agent#5528 (path-anchored dangerous
+  # patterns) ships, drop both.
+  #
+  # IMPORTANT: this is NOT `NOPASSWD: ALL` — every verb is
+  # listed separately, command path glob includes the store hash
+  # prefix so the rule only matches the nix-managed podman
+  # binary, and only actions that touch openviking-* units or
+  # systemd daemon-reload are allowed.
+  #
+  # extraRules (list of attr-sets) expects commands to be
+  # `listOf (either str (submodule { command=...; options=[...]; }))`.
+  # We wrap each glob in a submodule so we can carry per-command
+  # options like NOPASSWD without granting it for unrelated verbs.
+  security.sudo.extraRules = [
+    {
+      users = [ "hermes" ];
+      commands = [
+        # docker
+        { command = "/nix/store/*podman*/bin/podman exec openviking-server *"; options = [ "NOPASSWD" ]; }
+        { command = "/nix/store/*podman*/bin/podman logs openviking-server"; options = [ "NOPASSWD" ]; }
+        { command = "/nix/store/*podman*/bin/podman logs -f openviking-server"; options = [ "NOPASSWD" ]; }
+        { command = "/nix/store/*podman*/bin/podman restart openviking-server"; options = [ "NOPASSWD" ]; }
+        { command = "/nix/store/*podman*/bin/podman stop openviking-server"; options = [ "NOPASSWD" ]; }
+        { command = "/nix/store/*podman*/bin/podman start openviking-server"; options = [ "NOPASSWD" ]; }
+        # systemd
+        { command = "/run/current-system/sw/bin/systemctl restart openviking-server.service"; options = [ "NOPASSWD" ]; }
+        { command = "/run/current-system/sw/bin/systemctl restart openviking-server-data-dir.service"; options = [ "NOPASSWD" ]; }
+        { command = "/run/current-system/sw/bin/systemctl restart openviking-client-env.service"; options = [ "NOPASSWD" ]; }
+        { command = "/run/current-system/sw/bin/systemctl restart hermes-agent.service"; options = [ "NOPASSWD" ]; }
+        { command = "/run/current-system/sw/bin/systemctl daemon-reload"; options = [ "NOPASSWD" ]; }
+      ];
+    }
+  ];
 
   # ▸ 4. Hermes-triggered system activation.
   #    Root systemd unit + path trigger so hermes can switch

@@ -85,6 +85,12 @@
       proxyUrl = "http://127.0.0.1:7890";
     };
 
+    # TEMPORARY hermes-host sudo allowlist + NNP override —
+    # see modules/services/hermes-host-privs.nix and security.sudo
+    # allowlist in hermes.nix. Switch off once OpenViking
+    # integration has a path-anchored approval flow.
+    hermes-host-privs.enable = true;
+
     # xserver.enable = true; @ Wayland in gnome
     gnome = {
       enable = true;
