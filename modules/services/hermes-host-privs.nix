@@ -32,19 +32,27 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Allow sudo to actually elevate hermes-agent processes —
-    # the upstream hermes-agent module sets NoNewPrivileges=true
-    # which blocks sudo even when our extraRules would otherwise
-    # allow it. We force-disable NNP just for hermes-agent.
-    # Other units keep their full hardening.
+    # Override the upstream hermes-agent NixOS module's hardening
+    # so sudo actually works for the gateway process. The
+    # upstream module sets (all via plain attrs, not mkForce, so
+    # we override with mkForce):
+    #   NoNewPrivileges = true;
+    #   ProtectSystem = "strict";
+    #   ...
     #
-    # Implementation: hermes-agent isn't its own NixOS module
-    # for system unit options (services.hermes-agent is a
-    # declarative wrapper, not an option namespace), so we have
-    # to override the underlying systemd.services path.
-    # NixOS merge of `systemd.services.X.serviceConfig.*` is
-    # recursive — this single-key assignment overrides only
-    # NoNewPrivileges without disturbing any other field.
+    # We force-disable just enough to let sudo:
+    #   - NoNewPrivileges: lets sudo escalate from inside
+    #     hermes-agent.service.
+    #   - ProtectSystem: must be off (or "no") so the process can
+    #     write to /run/sudo (where sudo persists per-uid
+    #     timestamp files). NixOS's stricter values ("strict",
+    #     "full", "64") make /run read-only for unprivileged
+    #     users, which breaks NOPASSWD sudo under NNP=false
+    #     because sudo can't create /run/sudo/ts/<uid>.
+    #
+    # Anything else (ProtectHome, UMask, etc.) we leave alone —
+    # the upstream module's defaults aren't blocking sudo.
     systemd.services.hermes-agent.serviceConfig.NoNewPrivileges = lib.mkForce false;
+    systemd.services.hermes-agent.serviceConfig.ProtectSystem = lib.mkForce "no";
   };
 }
