@@ -155,27 +155,23 @@ in
       type = lib.types.attrs;
       default = {
         server = {
-          host = "0.0.0.0";
+          host = "127.0.0.1";
           port = 1933;
-          # api_key mode = bearer token auth on the root endpoint.
-          # dev mode doesn't work with our setup because the
-          # upstream OpenViking defaults the bind address to 0.0.0.0
-          # in dev mode, which then trips the same check that
-          # requires dev mode to bind 127.0.0.1 — the dev-mode
-          # security check assumes you're binding localhost and
-          # panics otherwise. With api_key mode we can bind 0.0.0.0
-          # because podman is the only thing that talks to the
-          # container, and the actual port mapping
-          # (`-p 127.0.0.1:1933:1933`) keeps the server reachable
-          # only from the host's loopback.
+          # dev mode = unauthenticated root endpoint. dev mode is
+          # the right choice for a single-host single-client setup
+          # like ours (hermes-agent is the only thing that talks to
+          # OpenViking, and we bind podman to 127.0.0.1:1933 on the
+          # host firewall so nothing else can reach it). api_key
+          # mode triggers OpenViking's multi-tenant auth which
+          # expects a per-user api_key minted by the Admin API —
+          # i.e. a runtime bootstrap script for every fresh host,
+          # which is more machinery than we want to maintain here.
           #
-          # The root_api_key is rendered at runtime from
-          # /run/secrets/openviking/api_key, which sops-nix
-          # decrypts from aleroza.yaml:\$openviking.api_key. The
-          # same value is exported into hermes-agent.service via
-          # OPENVIKING_API_KEY so the gateway can talk to us.
-          auth_mode = "api_key";
-          root_api_key = "__read_from_file__";
+          # The dev-mode localhost-only security check requires
+          # server.host = "127.0.0.1" exactly, so we keep that and
+          # let the host firewall NOT expose port 1933
+          # (auto.openviking.openFirewall defaults to false).
+          auth_mode = "dev";
         };
         storage = {
           workspace = "/data";
