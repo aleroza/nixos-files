@@ -55,15 +55,30 @@
     settings.model = "minimax/MiniMax-M3";
     settings.toolsets = [ "all" ];
     settings.approvals.smartPolicy = ''
-      ESCALATE any command that touches:
-        - /var/lib/hermes/workspace/.switch-request
-        - /var/lib/hermes/workspace/.pending-switch
-      These two files trigger a real NixOS system switch via the
-      nixos-activate.service systemd unit. Touching them is the only
-      step in the hermes pipeline that materially changes the running
-      system; everything else (commit, push, build, dry-run, flake check)
-      is reversible without sudo. The user explicitly wants to approve
-      the switch step itself.
+      ESCALATE any command whose argument list, after shell
+      deobfuscation (quotes, escapes, $() substitution, backslash
+      continuations), references either of these two absolute
+      paths:
+
+        /var/lib/hermes/workspace/.switch-request
+        /var/lib/hermes/workspace/.pending-switch
+
+      These files are the NixOS-switch trigger pair: writing to
+      .pending-switch records the closure to activate; touching
+      .switch-request wakes the systemd.paths unit which launches
+      switch-to-configuration. There is no undo that doesn't
+      involve picking a different boot entry at systemd-boot
+      prompt.
+
+      The path match is what matters, not the writing command.
+      `touch`, `tee`, `echo >`, `cat >`, `python -c`, `bash -c`,
+      `cp`, `mv`, `sed -i`, and any other write primitive all
+      escalate. Similarly, reading or deleting the files is fine
+      (rm/ls/cat on the flags) — only mutation is the problem.
+
+      Every other step in the hermes pipeline (git commit, git
+      push, nix build, nix flake check, dry-run, jq, grep, etc.)
+      is reversible without sudo and continues to auto-approve.
     '';
 
     # Fix "ModuleNotFoundError: No module named 'hermes_state_common'"
