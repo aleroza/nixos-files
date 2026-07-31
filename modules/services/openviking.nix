@@ -30,7 +30,7 @@
 let
   cfg = config.services.openviking;
   autoCfg = config.auto.openviking;
-  openvikingImage = "openviking/openviking:v0.4.11.dev23";
+  openvikingImage = "openviking/openviking@sha256:a345a30c7a84d0035de0d750f8fe482f5caa508ecee95903d275539a425f991b";
   # Render ov.conf with the api_key substituted at activation
   # time (so changing apiKeyFile doesn't require a rebuild —
   # just an activation). We embed it as `OPENVIKING_CONF_CONTENT`
@@ -85,6 +85,7 @@ let
       --arg key "$KEY" -c '
         .embedding.dense.api_key = $key
         | .vlm.api_key = $key
+        | .server.root_api_key = $key
       ' ${pkgs.writeText "ov-config-template.json" (builtins.toJSON cfg.ovConfig)})
     # systemd's EnvironmentFile parser splits values on
     # whitespace. JSON contains spaces between fields, so an
@@ -154,19 +155,27 @@ in
       type = lib.types.attrs;
       default = {
         server = {
-          host = "127.0.0.1";
+          host = "0.0.0.0";
           port = 1933;
-          # dev mode = unauthenticated root endpoint. We bind
-          # server.host to 127.0.0.1 (not 0.0.0.0) so OpenViking
-          # doesn't trip its own dev-mode security check, and the
-          # podman port mapping `-p 127.0.0.1:1933:1933` keeps
-          # the server reachable only from the host's loopback —
-          # the host firewall doesn't open the port, hermes-agent
-          # is the only consumer, and there's no auth to leak.
+          # api_key mode = bearer token auth on the root endpoint.
+          # dev mode doesn't work with our setup because the
+          # upstream OpenViking defaults the bind address to 0.0.0.0
+          # in dev mode, which then trips the same check that
+          # requires dev mode to bind 127.0.0.1 — the dev-mode
+          # security check assumes you're binding localhost and
+          # panics otherwise. With api_key mode we can bind 0.0.0.0
+          # because podman is the only thing that talks to the
+          # container, and the actual port mapping
+          # (`-p 127.0.0.1:1933:1933`) keeps the server reachable
+          # only from the host's loopback.
           #
-          # Switch to auth_mode="api_key" + root_api_key if you
-          # ever expose OpenViking beyond localhost.
-          auth_mode = "dev";
+          # The root_api_key is rendered at runtime from
+          # /run/secrets/openviking/api_key, which sops-nix
+          # decrypts from aleroza.yaml:\$openviking.api_key. The
+          # same value is exported into hermes-agent.service via
+          # OPENVIKING_API_KEY so the gateway can talk to us.
+          auth_mode = "api_key";
+          root_api_key = "__read_from_file__";
         };
         storage = {
           workspace = "/data";
@@ -270,7 +279,7 @@ in
     # rendered config contains secrets, so it must not live in
     # the Nix store.
     systemd.services.openviking-server = {
-      description = "OpenViking self-hosted context database";
+      description = "OpenViking self-hosted context database — config rev ${builtins.substring 0 8 (builtins.hashString "sha256" (builtins.toJSON cfg.ovConfig))}";
       wantedBy = [ "multi-user.target" ];
       after = [
         "network-online.target"
@@ -325,6 +334,14 @@ in
           PROXY_ARGS+=(
             -e NO_PROXY="${cfg.noProxy}"
           )
+          # Always recreate the container on start so a new
+          # closure (image digest, env vars, mounts, anything) is
+          # picked up the moment systemd restarts us. Without
+          # this, --replace leaves the container running when
+          # podman can't gracefully stop it within 10s (e.g. when
+          # the container's entrypoint is wedged), and the new
+          # unit's args never take effect.
+          ${pkgs.podman}/bin/podman rm -f openviking-server 2>/dev/null || true
           exec ${pkgs.podman}/bin/podman run \
             --rm \
             --name=openviking-server \
@@ -341,6 +358,17 @@ in
         '';
         ExecStop = "-${pkgs.podman}/bin/podman stop openviking-server";
       };
+      # Restart whenever any of the files this ExecStart reads
+      # changes. Render-ov-conf lives in /nix/store and is
+      # regenerated on every commit; openviking-server-run is
+      # regenerated whenever the module changes. Together they
+      # cover "Nix config changed → restart the container with
+      # the new unit args" without needing a separate restart
+      # step.
+      restartTriggers = [
+        renderConf
+        pkgs.podman
+      ];
     };
 
     # Render ov.conf with the real api_key substituted in. State
@@ -372,16 +400,55 @@ in
       };
     };
 
-    # Env file for clients (e.g. hermes-agent). The openviking
-    # client reads OPENVIKING_ENDPOINT / *_ACCOUNT / *_USER /
-    # *_AGENT from the process environment.
-    environment.etc."openviking/client.env".text = ''
-      OPENVIKING_ENDPOINT=http://127.0.0.1:${toString cfg.port}
-      OPENVIKING_ACCOUNT=default
-      OPENVIKING_USER=default
-      OPENVIKING_AGENT=hermes
-    '';
-    environment.etc."openviking/client.env".mode = "0644";
+    # We don't write /etc/openviking/client.env as a static NixOS
+    # file because we need OPENVIKING_API_KEY substituted at
+    # runtime (it lives in a sops-managed file at apiKeyFile).
+    # Instead, render-client-env (below) writes
+    # /var/lib/openviking-server/client.env which hermes-agent
+    # picks up via EnvironmentFile.
+
+    # Render client.env with the real api_key substituted in. We
+    # can't put a secret in environment.etc.<name>.text because
+    # Nix build-time evaluation can't reach runtime files. Same
+    # pattern as render-ov-conf: a tiny systemd unit that reads
+    # apiKeyFile and writes /var/lib/openviking-server/client.env
+    # at unit start. systemd reads the resulting file via
+    # EnvironmentFile= in the hermes-agent.service unit.
+    systemd.services.openviking-client-env = {
+      description = "Render /var/lib/openviking-server/client.env with api_key substituted";
+      wantedBy = [ "multi-user.target" ];
+      before = [ "hermes-agent.service" ];
+      unitConfig.DefaultDependencies = false;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = pkgs.writeShellScript "render-client-env" ''
+          set -euo pipefail
+          mkdir -p /var/lib/openviking-server
+          KEY=""
+          SRC=${lib.escapeShellArg (toString cfg.apiKeyFile)}
+          if grep -qE '^GOOGLE_API_KEY=' "$SRC"; then
+            KEY=$(grep -E '^GOOGLE_API_KEY=' "$SRC" | head -n1 | cut -d= -f2- | tr -d '\n')
+          elif grep -qE '^OPENAI_API_KEY=' "$SRC"; then
+            KEY=$(grep -E '^OPENAI_API_KEY=' "$SRC" | head -n1 | cut -d= -f2- | tr -d '\n')
+          else
+            KEY=$(cat "$SRC" | tr -d '\n')
+          fi
+          if [ -z "$KEY" ]; then
+            echo "No API key found in $SRC" >&2
+            exit 1
+          fi
+          cat > /var/lib/openviking-server/client.env <<EOF
+          OPENVIKING_ENDPOINT=http://127.0.0.1:${toString cfg.port}
+          OPENVIKING_ACCOUNT=default
+          OPENVIKING_USER=default
+          OPENVIKING_AGENT=hermes
+          OPENVIKING_API_KEY=$KEY
+          EOF
+          chmod 0644 /var/lib/openviking-server/client.env
+        '';
+      };
+    };
 
     # Fire a firewall hole if the user explicitly asks for one.
     networking.firewall.allowedTCPPorts =
