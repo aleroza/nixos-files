@@ -114,7 +114,7 @@
   #    the host owner. See hosts/aleroza-pc/README.md.
 
   systemd.services.nixos-activate = {
-    description = "Hermes-triggered nixos-rebuild activate (allowlisted)";
+    description = "Hermes-triggered nixos-rebuild activate";
     wantedBy = [ ];
     wants = [ "network-online.target" ];
     after = [ "network-online.target" ];

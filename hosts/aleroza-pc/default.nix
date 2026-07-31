@@ -198,6 +198,7 @@
     wget
     htop
     btop
+    cmatrix
     parted
     fastfetch
     git
