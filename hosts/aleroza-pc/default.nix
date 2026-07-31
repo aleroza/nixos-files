@@ -146,9 +146,11 @@
   #   переопределяют только то, что отличается.
   #
   #   Hermes env file lives in hermes.nix (separate ownership).
-  #   OpenViking reuses the GOOGLE_API_KEY line from the same
-  #   hermes/env secret via services.openviking.apiKeyFile —
-  #   no second sops secret needed.
+  #   OpenViking reuses the GOOGLE_API_KEY line from a dedicated
+  #   secret at /run/secrets/hermes/GOOGLE_API_KEY, which sops reads
+  #   from aleroza.yaml:\$hermes.GOOGLE_API_KEY. We declare it here
+  #   (not hermes.nix) because the file lives in the aleroza namespace
+  #   of the secrets tree, not the hermes namespace.
   sops.secrets =
     let
       alerozaSecret =
@@ -164,6 +166,7 @@
     {
       "aleroza/password" = alerozaSecret { };
       "aleroza/dockerhub/password" = alerozaSecret { };
+      "hermes/GOOGLE_API_KEY" = alerozaSecret { };
     };
 
   # ▸ Подсказываем интерактивному `sops`, какие правила шифрования применять.

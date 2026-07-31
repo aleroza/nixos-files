@@ -212,12 +212,15 @@ in
 
     apiKeyFile = lib.mkOption {
       type = lib.types.path;
-      default = /run/secrets/hermes/env;
+      default = /run/secrets/hermes/GOOGLE_API_KEY;
       description = ''
         Path to a file containing the Google AI Studio API key.
         Read at unit start; either a raw key (one line) or an
         env-file with `GOOGLE_API_KEY=...` (or `OPENAI_API_KEY=`)
-        lines. Default reuses the existing hermes sops secret.
+        lines. Default reuses the dedicated sops secret at
+        /run/secrets/hermes/GOOGLE_API_KEY; switch to
+        /run/secrets/hermes/env if you want one combined
+        secret file for everything Google-shaped.
       '';
     };
 
@@ -446,6 +449,7 @@ in
           OPENVIKING_API_KEY=$KEY
           EOF
           chmod 0644 /var/lib/openviking-server/client.env
+          echo "render-client-env: wrote $(stat -c %s /var/lib/openviking-server/client.env) bytes" >&2
         '';
       };
     };
