@@ -15,5 +15,6 @@
     ./firewall/gaming.nix
     ./docker.nix
     ./network-capture.nix
+    ./services/openviking.nix
   ];
 }

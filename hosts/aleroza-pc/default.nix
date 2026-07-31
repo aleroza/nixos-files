@@ -76,6 +76,10 @@
     desktop = true;
     laptop = true;
 
+    openviking = {
+      enable = true;
+    };
+
     # xserver.enable = true; @ Wayland in gnome
     gnome = {
       enable = true;

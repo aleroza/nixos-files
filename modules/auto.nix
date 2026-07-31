@@ -189,6 +189,29 @@ in
       };
     };
 
+    # ▸ OpenViking (local-first context database for Hermes Agent)
+    openviking = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Enable OpenViking self-hosted context database on
+          127.0.0.1:1933. Used by services.hermes-agent when
+          memory.provider is set to "openviking".
+        '';
+      };
+      openFirewall = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Whether to expose the OpenViking port (1933) on the
+          firewall. Off by default — the server binds to
+          127.0.0.1 only, so firewall rules are usually
+          unnecessary.
+        '';
+      };
+    };
+
     # ▸ Bluetooth
     bluetooth = mkOption {
       type = types.bool;
