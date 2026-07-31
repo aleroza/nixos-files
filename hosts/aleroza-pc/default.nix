@@ -197,7 +197,6 @@
     vim
     wget
     htop
-    btop
     parted
     fastfetch
     git
