@@ -78,6 +78,11 @@
 
     openviking = {
       enable = true;
+      # Route OpenViking's outbound traffic through the same
+      # proxy that hermes-agent uses. Necessary for the Google
+      # AI Studio endpoint when Gemini rejects the host's
+      # direct egress IP (e.g. shared/cloud hosting).
+      proxyUrl = "http://127.0.0.1:7890";
     };
 
     # xserver.enable = true; @ Wayland in gnome

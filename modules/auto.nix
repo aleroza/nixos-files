@@ -210,6 +210,18 @@ in
           unnecessary.
         '';
       };
+      proxyUrl = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "http://127.0.0.1:7890";
+        description = ''
+          HTTP/HTTPS proxy URL for OpenViking's outbound traffic
+          (Gemini API, VLM API). null means direct connection.
+          Set this when the host's egress IP is rejected by the
+          upstream provider or you want all traffic funneled
+          through the same proxy as hermes-agent.
+        '';
+      };
     };
 
     # ▸ Bluetooth

@@ -214,6 +214,40 @@ in
         lines. Default reuses the existing hermes sops secret.
       '';
     };
+
+    # Optional HTTP/HTTPS proxy for the container. Some embedding
+    # / VLM providers reject direct connections from non-public
+    # IP ranges, or the user wants outbound traffic going through
+    # the same proxy as the rest of the host. Set this and
+    # HTTPS_PROXY / HTTP_PROXY / ALL_PROXY / NO_PROXY are
+    # propagated into the container; the OpenViking Python
+    # client picks them up via the standard library.
+    #
+    # Default is "no proxy" — OpenViking talks directly to
+    # Gemini's public endpoint. Set to e.g.
+    #   services.openviking.proxyUrl = "http://127.0.0.1:7890";
+    # to route through the host's proxy. NO_PROXY is auto-set
+    # to localhost/127.0.0.1 so the loopback bind to OpenViking
+    # itself doesn't go through the proxy.
+    proxyUrl = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "http://127.0.0.1:7890";
+      description = ''
+        HTTP/HTTPS proxy URL for outbound traffic from the
+        OpenViking container. null means no proxy.
+      '';
+    };
+
+    noProxy = lib.mkOption {
+      type = lib.types.str;
+      default = "127.0.0.1,localhost,::1";
+      description = ''
+        Comma-separated NO_PROXY list. Excluded hosts bypass the
+        proxy regardless of HTTPS_PROXY setting. Default excludes
+        loopback so OpenViking's own API endpoint stays direct.
+      '';
+    };
   };
 
   config = lib.mkIf autoCfg.enable {
@@ -228,6 +262,9 @@ in
         '';
       }
     ];
+
+    # Forward proxy config from auto → services.
+    services.openviking.proxyUrl = autoCfg.proxyUrl;
 
     # The actual server. We hand-roll a podman systemd unit
     # instead of using NixOS's virtualisation.oci-containers
@@ -261,6 +298,22 @@ in
           # Decode the JSON config from the base64 env var the
           # EnvironmentFile exported.
           DECODED=$(printf '%s' "$OPENVIKING_CONF_CONTENT_B64" | ${pkgs.coreutils}/bin/base64 -d)
+          # Build optional -e args for proxy env vars. We don't
+          # hard-code the proxy in the module — services.openviking.proxyUrl
+          # controls this, and podman picks up the env vars
+          # automatically from -e. NO_PROXY is always set so
+          # the loopback bind (OpenViking's own API) stays direct.
+          PROXY_ARGS=()
+          ${lib.optionalString (cfg.proxyUrl != null) ''
+            PROXY_ARGS+=(
+              -e HTTP_PROXY="${cfg.proxyUrl}"
+              -e HTTPS_PROXY="${cfg.proxyUrl}"
+              -e ALL_PROXY="${cfg.proxyUrl}"
+            )
+          ''}
+          PROXY_ARGS+=(
+            -e NO_PROXY="${cfg.noProxy}"
+          )
           exec ${pkgs.podman}/bin/podman run \
             --rm \
             --name=openviking-server \
@@ -270,6 +323,7 @@ in
             -d \
             --replace \
             -e OPENVIKING_CONF_CONTENT="$DECODED" \
+            "''${PROXY_ARGS[@]}" \
             -p 127.0.0.1:${toString cfg.port}:${toString cfg.port} \
             -v ${cfg.dataDir}:/data \
             -w /data \
