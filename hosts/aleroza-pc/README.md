@@ -16,7 +16,9 @@
    `/nix/store`),
 2. **активировать** новые поколения NixOS,
 
-в `default.nix` сделаны согласованные правки.
+вся hermes-логика вынесена в `hermes.nix` (импортируется из
+`default.nix`). Хост-файл остаётся сфокусирован на собственно
+настройке хоста.
 
 ### 1. Сборка без `nixbld`
 
@@ -88,14 +90,104 @@ root), триггерится только явным flag-файлом —
 │   ├─ читает .pending-switch → CLOSURE=/nix/store/...            │
 │   ├─ [CLOSURE валидный /nix/store/-nixos-system-aleroza-pc-*]   │
 │   ├─ [ -x $CLOSURE/bin/switch-to-configuration ]                │
-│   ├─ $CLOSURE/bin/switch-to-configuration switch                │
+│   ├─ systemd-run --unit=hermes-switch-* --no-block \            │
+│   │       $CLOSURE/bin/switch-to-configuration switch           │
+│   ├─ exit 0  ← service done, ничего не держит                   │
 │   └─ rm -f /var/lib/hermes/workspace/.switch-request            │
 │              .pending-switch                                    │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ hermes-switch-<ts>-<pid>.service  (transient, --collect)        │
+│   делает реальный switch в своей cgroup, вне lifecycle         │
+│   родительского nixos-activate.service                          │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 Сборка **не** идёт внутри юнита — она медленная и шумная, в oneshot
-только то, что быстро и атомарно.
+только то, что быстро и атомарно. `systemd-run` отделяет шаг
+"инициировать switch" от шага "выполнить switch": см. следующую
+секцию.
+
+#### Pipeline end-to-end
+
+Пошаговая инструкция от правки конфига до активации. Каждый шаг
+**обязателен** — пропуск любого из них увеличивает шансы
+перезагрузить сломанную систему или закоммитить нерабочее.
+
+```bash
+# 0. Убедиться, что рабочее дерево чистое, и ты на своей ветке
+git status --short          # должно быть пусто
+git branch --show-current   # не main; обычно feature-ветка
+
+# 1. Правки в любых файлах nixos-files
+
+# 2. Статическая валидация — flake должен вычисляться,
+#    даже если сами derivation'ы ещё не собираются
+nix flake check --no-build
+
+# 3. Dry-build closure — показывает какие derivations пересоберутся,
+#    без фактической сборки. Если что-то evaluate-уровня сломано,
+#    это всплывёт здесь.
+nix build --dry-run \
+  .#nixosConfigurations.aleroza-pc.config.system.build.toplevel
+
+# 4. Если есть сомнения — собрать заранее (не активируя) и
+#    осмотреть вывод. Иначе переходим к шагу 5.
+nix build \
+  .#nixosConfigurations.aleroza-pc.config.system.build.toplevel
+CLOSURE=$(readlink result)
+
+# 5. Коммит + пуш
+git add <files>
+git commit -m "<conventional commit message>"
+git push origin <branch>
+
+# 6. Открыть PR на GitHub, дождаться CI (если есть),
+#    смёржить самому или попросить ревью
+
+# 7. После merge в main: запустить полную сборку closure и
+#    положить в .pending-switch + .switch-request. systemd-run
+#    transient unit заберёт работу на себя.
+nix build \
+  .#nixosConfigurations.aleroza-pc.config.system.build.toplevel
+CLOSURE=$(readlink result)
+echo "$CLOSURE" > /var/lib/hermes/workspace/.pending-switch
+touch /var/lib/hermes/workspace/.switch-request
+
+# 8. Через ~5 секунд проверить, что всё прошло
+sleep 6
+systemctl status nixos-activate.service      # status=0/SUCCESS
+readlink /run/current-system                  # должен совпадать с $CLOSURE
+ls /run/current-system/sw/bin/<expected>     # пакет, который добавляли
+```
+
+**Когда что-то идёт не так:**
+
+- `nix flake check` упал → **не коммитим**, чиним ошибку evaluation.
+  Часто это синтаксическая ошибка в `.nix` или неверное имя опции.
+- `nix build --dry-run` показал неожиданные derivations → подумать,
+  откуда они, прежде чем коммитить. Особенно если это полная
+  пересборка `nixpkgs` (новый `flake.lock` с большим апдейтом).
+- `nix build` (шаг 4 или 7) упал с ошибкой компиляции → коммитим
+  правку, но **не триггерим** switch. В `feat/*` ветке битый
+  closure безопаснее: пока ты не переключишься, текущая система
+  работает.
+- `systemctl status nixos-activate.service` после trigger показывает
+  `status=15/TERM` или `failed` → смотрим `journalctl -u
+  'hermes-switch-*'`; если switch реально не прошёл — `current-system`
+  не обновился, и можно чинить без потерь.
+- `current-system` обновился, но что-то не работает → загрузка в
+  предыдущее поколение через systemd-boot меню или `sudo nixos-rebuild
+  switch --rollback`.
+
+**Что не входит в pipeline:**
+
+- `nix flake update` — делается отдельным коммитом `chore: bump
+  inputs`, проверяется полным rebuild, и только потом merge. Не
+  мешаем апдейт inputs с feature-правками.
+- Тесты, lint, форматирование — отдельная тема; пока их нет.
 
 #### Защитные свойства
 
@@ -117,14 +209,13 @@ root), триггерится только явным flag-файлом —
   пересекается только в одном root-юните, только по явному триггеру,
   и только против уже валидного closure.
 
-#### Что может пойти не так: самопроизвольное убийство service
+#### Как service избегает самопроизвольного убийства
 
-`nixos-rebuild switch` (точнее, его финальная стадия
-`switch-to-configuration switch`) **останавливает все активные
-systemd-юниты** при активации нового поколения. Это включает наш
-собственный `nixos-activate.service`, если он ещё работает.
-
-В логе это выглядит так:
+`switch-to-configuration switch` на финальной стадии останавливает
+**все активные systemd-юниты** — это нужно, чтобы они не держали
+старые версии сокетов/бинарников во время перехода. Если бы
+`nixos-activate.service` запускал `switch-to-configuration` прямо
+внутри своего `ExecStart`, он сам бы оказался в этой волне:
 
 ```
 nixos-activate-start: Checking switch inhibitors... done
@@ -133,37 +224,79 @@ nixos-activate-start: stopping the following units: nixos-activate.service
 nixos-activate.service: Main process exited, code=killed, status=15/TERM
 ```
 
-Статус `15/TERM` — это не баг нашего скрипта, это поведение самого
-`nixpkgs/nixos/modules/system/activation/switch-to-configuration.nix`.
-На реальный результат не влияет: `system` profile уже переключён,
-bootloader запись создана, `current-system` обновился. Просто systemd
-считает, что service упал.
+Активация при этом всё равно прошла бы (system profile переключён,
+bootloader entry записан, `current-system` обновлён) — systemd бы
+просто записал service как failed. На ремеди это лишний шум и
+ложный сигнал тревоги.
 
-Из этого следует **важное ограничение**:
+Чтобы этого не было, service делегирует switch в **transient
+unit** через `systemd-run --no-block --collect`:
 
-> Любой rebuild, который меняет сам `systemd.services.nixos-activate`,
-> `systemd.paths.nixos-activate-trigger`, `users.users.hermes.*` или
-> `services.hermes-agent.*`, **не может быть активирован через тот же
-> триггер-юнит** — он убьёт себя до того, как дочитает новые unit-файлы
-> из closure.
+```nix
+TRANSIENT="hermes-switch-$(date +%s)-$$"
+systemd-run \
+  --unit="$TRANSIENT" \
+  --description="Hermes-triggered switch-to-configuration for $GEN" \
+  --no-block \
+  --collect \
+  --setenv=GEN="$GEN" \
+  "$CLOSURE/bin/switch-to-configuration" switch
+```
 
-Для таких изменений нужен ручной `sudo nixos-rebuild switch --flake
-.#[hostname]` от тебя. Hermes это понимает: после ребилда, который
-трогает эти unit-файлы, скрипт не будет класть новый closure в
-`.pending-switch` — изменения остаются только в git и в `/nix/store`.
+Сценарий:
 
-Изменения, которые **можно** активировать через trigger:
+1. `nixos-activate.service` ставит transient unit в очередь и
+   сразу делает `exit 0`. Status=0/SUCCESS. Trigger-файлы
+   удалены.
+2. transient unit живёт в своей cgroup, не child нашего service.
+3. `switch-to-configuration` бежит в transient unit. Когда он
+   доходит до стадии "stop all units", наш `nixos-activate.service`
+   уже давно inactive, а transient unit сам себя не убивает —
+   он не находится в списке "all units, которые были активны до
+   активации нового поколения" (этот список формируется по
+   состоянию на момент старта switch, а наш transient unit
+   поднялся внутри).
+4. switch отрабатывает до конца, `current-system` обновлён,
+   systemd-boot entry записан.
 
-- любые `modules/*` правки, не затрагивающие `systemd.services.*`
-- `hosts/aleroza-pc` правки в разделах `auto.*`, `environment.*`,
-  `users.users.aleroza.*`, `users.users.openclaw.*`, packages, и т.п.
+**Цена:** exit code самого `switch-to-configuration` больше не
+доходит до trigger flag (мы уже удалили файлы). Hermes супервизит
+исход через journalctl transient unit-а:
 
-Изменения, которые нужно активировать вручную:
+```bash
+journalctl -u 'hermes-switch-*' --no-pager -n 100
+```
 
-- `systemd.services.nixos-activate`, `systemd.paths.nixos-activate-trigger`
-- `services.hermes-agent.*`
-- `users.users.hermes.*`
-- любые `systemd.services.*` или `systemd.paths.*`
+Если что-то пошло не так — там будет видно. В happy-path
+`current-system` указывает на новый closure и `systemctl status
+nixos-activate.service` показывает `status=0/SUCCESS`.
+
+#### Что активируется через trigger
+
+После введения `systemd-run` транзиентного unit-а ограничение
+**снято**: теперь через trigger flag можно активировать **любую**
+правку в конфиге хоста — включая сам `systemd.services.nixos-activate`,
+`systemd.paths.nixos-activate-trigger`, `users.users.hermes.*`,
+`services.hermes-agent.*`. Единственное, что реально нужно от
+хост-овнера, это:
+
+- **Первая активация после merge PR** с правкой `default.nix`,
+  `hermes.nix`, `flake.nix` или другого host-файла, в котором
+  `imports = [ ./hermes.nix ]`. Текущая инкарнация service в
+  `/etc/systemd/system/nixos-activate.service` ещё не знает про
+  новую структуру, пока ты не сделаешь `sudo nixos-rebuild
+  switch` один раз. После этого — любая правка активируется
+  через trigger.
+- **Любая правка `flake.lock`** (новые версии `nixpkgs`,
+  `home-manager`, и т.п.) — это не constraint trigger-а, но
+  rebuild closure меняется, что иногда требует ручного
+  решения при конфликте package versions. На практике это
+  редко мешает.
+
+Всё остальное — packages, модули, `environment.*`, `auto.*`,
+`users.users.aleroza.*`, `users.users.openclaw.*`, любые
+`systemd.services.*`/`systemd.paths.*` — hermes активирует сам,
+без sudo.
 
 #### Rate limits
 
@@ -207,8 +340,11 @@ rate-limit в `[Service]`. Если встретишь его после это�
 systemctl status nixos-activate.service
 systemctl status nixos-activate-trigger.path
 
-# последний запуск
+# последний запуск главного service
 journalctl -u nixos-activate.service -n 50 --no-pager
+
+# исход switch-to-configuration (transient unit, имя включает ts + pid)
+journalctl -u 'hermes-switch-*' -n 100 --no-pager
 
 # если юниты застряли в start-limit-hit
 sudo systemctl reset-failed nixos-activate.service nixos-activate-trigger.path
@@ -223,6 +359,4 @@ sudo /nix/store/*-nixos-system-*/bin/switch-to-configuration switch
 - Не даёт hermes shell или sudo на хосте.
 - Не даёт hermes группу `nixbld` или любой другой прямой write-доступ
   в `/nix/store` от своего имени.
-- Не активирует изменения, которые трогают сами эти юниты (см.
-  «Что может пойти не так»).
 - Не отключает NNP на `hermes-agent.service`.
