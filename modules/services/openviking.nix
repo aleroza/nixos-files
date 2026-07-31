@@ -146,30 +146,27 @@ in
     # surface (works because Google exposes `/v1beta/openai/` on
     # the same host). The apiKeyFile points to a sops-managed
     # secret so the key never lands in the Nix store.
+    # The ov.conf JSON. Rendered into OPENVIKING_CONF_CONTENT
+    # and passed to the container as an env var at unit
+    # start. The api_key placeholders `__read_from_file__`
+    # are substituted from `services.openviking.apiKeyFile`.
     ovConfig = lib.mkOption {
       type = lib.types.attrs;
       default = {
         server = {
-          host = "0.0.0.0";
+          host = "127.0.0.1";
           port = 1933;
-          # api_key mode = bearer token auth on the root endpoint.
-          # Without this, dev mode refuses to start when bound to
-          # 0.0.0.0 — but we want it reachable from the host's
-          # 127.0.0.1 mapping, and the only thing that talks to
-          # OpenViking is hermes-agent.service on this same host
-          # (so 127.0.0.1 is fine). Pick any random root_api_key
-          # here; hermes-agent will be configured with the same
-          # value via OPENVIKING_API_KEY env var so it can talk
-          # to the server.
+          # dev mode = unauthenticated root endpoint. We bind
+          # server.host to 127.0.0.1 (not 0.0.0.0) so OpenViking
+          # doesn't trip its own dev-mode security check, and the
+          # podman port mapping `-p 127.0.0.1:1933:1933` keeps
+          # the server reachable only from the host's loopback —
+          # the host firewall doesn't open the port, hermes-agent
+          # is the only consumer, and there's no auth to leak.
           #
-          # Note: OpenViking's auth model is currently being
-          # redesigned (the upstream Discord had complaints
-          # about api_key vs dev mode confusion). If switching
-          # to api_key fails at runtime with "unknown field",
-          # fall back to dev mode and override server.host to
-          # 127.0.0.1 here.
-          auth_mode = "api_key";
-          root_api_key = "__placeholder_set_via_secret__";
+          # Switch to auth_mode="api_key" + root_api_key if you
+          # ever expose OpenViking beyond localhost.
+          auth_mode = "dev";
         };
         storage = {
           workspace = "/data";
