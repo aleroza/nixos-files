@@ -126,6 +126,26 @@ in
       workdir = "/data";
     };
 
+    # Make sure the data dir exists before podman tries to
+    # mount it. StateDirectory= creates /var/lib/openviking
+    # owned by root with mode 0755 at unit-start; podman then
+    # can bind-mount it into the container. (Without this,
+    # podman errors out with "statfs: no such file or directory"
+    # because it stats the source path before mounting.)
+    systemd.services.openviking-server-data-dir = {
+      description = "Ensure OpenViking data directory exists";
+      wantedBy = [ "multi-user.target" ];
+      before = [ "podman-openviking-server.service" ];
+      unitConfig.DefaultDependencies = false;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        StateDirectory = "openviking";
+        StateDirectoryMode = "0755";
+        ExecStart = "/bin/true";
+      };
+    };
+
     # Server config — pinned and readable
     environment.etc."openviking/ov.conf".source = configFile;
     environment.etc."openviking/ov.conf".mode = "0644";
