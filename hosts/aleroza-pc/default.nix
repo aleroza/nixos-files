@@ -94,7 +94,10 @@
 
     docker = {
       enable = true;
-      users = [ "openclaw" ];
+      users = [
+        "openclaw"
+        "hermes"
+      ];
       login = [
         {
           user = "aleroza";
