@@ -362,19 +362,26 @@ in
             --cgroups=enabled \
             --sdnotify=conmon \
             --replace \
-            -e OPENVIKING_CONF_CONTENT="$DECODED" \
-            "''${PROXY_ARGS[@]}" \
-            -p 127.0.0.1:${toString cfg.port}:${toString cfg.port} \
-            -v ${cfg.dataDir}:/data \
-            -w /data \
-            ${cfg.image} \
             # openviking-entrypoint.sh defaults OPENVIKING_SERVER_HOST
             # to 0.0.0.0 (so the vikingbot child process can reach the
             # server). With dev auth_mode this triggers the
             # "host must be localhost" panic at startup. We force
             # the entrypoint's env to 127.0.0.1 so server --host
-            # is localhost and the dev-mode check passes.
-            -e OPENVIKING_SERVER_HOST=127.0.0.1
+            # is localhost and the dev-mode check passes. This MUST
+            # appear before the positional <image> arg in the same
+            # podman run invocation, otherwise the comment line that
+            # wraps our env-var would also comment out the env var
+            # itself (bash continuation backslash on each line puts
+            # everything after <image> into one logical line whose
+            # first `#` starts a comment that swallows everything up
+            # to the actual newline after the env var).
+            -e OPENVIKING_SERVER_HOST=127.0.0.1 \
+            -e OPENVIKING_CONF_CONTENT="$DECODED" \
+            "''${PROXY_ARGS[@]}" \
+            -p 127.0.0.1:${toString cfg.port}:${toString cfg.port} \
+            -v ${cfg.dataDir}:/data \
+            -w /data \
+            ${cfg.image}
         '';
         ExecStop = "-${pkgs.podman}/bin/podman stop openviking-server";
       };
