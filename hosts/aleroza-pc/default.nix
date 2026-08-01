@@ -131,6 +131,10 @@
     ];
   };
 
+  # Bootstrap only needed for api_key/trusted mode (Admin API
+  # user_key minting). Currently dev mode — disable.
+  services.openviking-bootstrap.enable = false;
+
   # ▸ Display manager override (DE модули ставят user = "", перебиваем тут)
   services.displayManager.autoLogin.user = lib.mkForce "aleroza";
 

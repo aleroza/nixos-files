@@ -30,7 +30,12 @@
 let
   cfg = config.services.openviking;
   autoCfg = config.auto.openviking;
-  openvikingImage = "openviking/openviking@sha256:a345a30c7a84d0035de0d750f8fe482f5caa508ecee95903d275539a425f991b";
+  # Try v0.4.7 (stable branch) before v0.4.11.dev* (which had a
+  # bug where the server ignored server.host in ov.conf and
+  # defaulted back to 0.0.0.0 even on dev mode). Stable branch
+  # also has the same auth (root_api_key + Admin API user_key),
+  # just without the host-ignore regression.
+  openvikingImage = "openviking/openviking@sha256:a25c8eb3759cec0f18d99635174e5475b0aeb712128410502c738e4a2300b01b";
   # Render ov.conf with the api_key substituted at activation
   # time (so changing apiKeyFile doesn't require a rebuild —
   # just an activation). We embed it as `OPENVIKING_CONF_CONTENT`
@@ -81,11 +86,18 @@ let
       echo "No API key found in $SRC" >&2
       exit 1
     fi
+    # Substitute api_key in 3 places. server.root_api_key
+    # substitution is conditional — when ovConfig declares a
+    # literal root_api_key we leave it alone. When ovConfig has
+    # the placeholder "__read_from_file__" we substitute the
+    # apiKeyFile content.
     JSON=$(${pkgs.jq}/bin/jq \
       --arg key "$KEY" -c '
         .embedding.dense.api_key = $key
         | .vlm.api_key = $key
-        | .server.root_api_key = $key
+        | (if (.server.root_api_key == "__read_from_file__")
+              then .server.root_api_key = $key
+              else . end)
       ' ${pkgs.writeText "ov-config-template.json" (builtins.toJSON cfg.ovConfig)})
     # systemd's EnvironmentFile parser splits values on
     # whitespace. JSON contains spaces between fields, so an
@@ -97,6 +109,12 @@ let
     B64=$(printf '%s' "$JSON" | ${pkgs.coreutils}/bin/base64 -w0)
     printf 'OPENVIKING_CONF_CONTENT_B64=%s\n' "$B64" > /var/lib/openviking-server/ov.conf.env
     chmod 0600 /var/lib/openviking-server/ov.conf.env
+    # Debug: also dump rendered JSON to /tmp, world-readable so we
+    # can inspect what landed without sudo. Pure diagnostic;
+    # contains the api_key — only enable during debugging.
+    ${pkgs.coreutils}/bin/install -m 0644 -o root -g root \
+      /var/lib/openviking-server/ov.conf.env \
+      /tmp/openviking-rendered-ov.json
     # Diagnostic so the journal shows we got here.
     echo "render-ov-conf: wrote $(stat -c %s /var/lib/openviking-server/ov.conf.env) bytes of OPENVIKING_CONF_CONTENT" >&2
   '';
@@ -161,16 +179,12 @@ in
           # the right choice for a single-host single-client setup
           # like ours (hermes-agent is the only thing that talks to
           # OpenViking, and we bind podman to 127.0.0.1:1933 on the
-          # host firewall so nothing else can reach it). api_key
-          # mode triggers OpenViking's multi-tenant auth which
-          # expects a per-user api_key minted by the Admin API —
-          # i.e. a runtime bootstrap script for every fresh host,
-          # which is more machinery than we want to maintain here.
+          # host firewall so nothing else can reach it).
           #
-          # The dev-mode localhost-only security check requires
-          # server.host = "127.0.0.1" exactly, so we keep that and
-          # let the host firewall NOT expose port 1933
-          # (auto.openviking.openFirewall defaults to false).
+          # dev mode requires server.host = 127.0.0.1 — the v0.4.11
+          # dev branch ignored that field and forced 0.0.0.0; on
+          # v0.4.7 the dev-mode host check is satisfied as long as
+          # we set it here.
           auth_mode = "dev";
         };
         storage = {
@@ -353,7 +367,14 @@ in
             -p 127.0.0.1:${toString cfg.port}:${toString cfg.port} \
             -v ${cfg.dataDir}:/data \
             -w /data \
-            ${cfg.image}
+            ${cfg.image} \
+            # openviking-entrypoint.sh defaults OPENVIKING_SERVER_HOST
+            # to 0.0.0.0 (so the vikingbot child process can reach the
+            # server). With dev auth_mode this triggers the
+            # "host must be localhost" panic at startup. We force
+            # the entrypoint's env to 127.0.0.1 so server --host
+            # is localhost and the dev-mode check passes.
+            -e OPENVIKING_SERVER_HOST=127.0.0.1
         '';
         ExecStop = "-${pkgs.podman}/bin/podman stop openviking-server";
       };
@@ -399,13 +420,6 @@ in
       };
     };
 
-    # We don't write /etc/openviking/client.env as a static NixOS
-    # file because we need OPENVIKING_API_KEY substituted at
-    # runtime (it lives in a sops-managed file at apiKeyFile).
-    # Instead, render-client-env (below) writes
-    # /var/lib/openviking-server/client.env which hermes-agent
-    # picks up via EnvironmentFile.
-
     # Render client.env with the real api_key substituted in. We
     # can't put a secret in environment.etc.<name>.text because
     # Nix build-time evaluation can't reach runtime files. Same
@@ -421,20 +435,52 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
+        # The bearer auth key is picked in this priority order:
+        #   1. ovConfig.server.root_api_key literal, when it is not
+        #      the placeholder "__read_from_file__" (which signals
+        #      "use apiKeyFile at runtime"). Literal values stay
+        #      verbatim across builds and across service restarts.
+        #   2. Runtime apiKeyFile (sops-managed Google API key,
+        #      OpenAI API key, or a one-line raw token). When
+        #      root_api_key is the placeholder, we read this file
+        #      and use its content as the bearer.
+        #
+        # We pre-compute the bearer at eval time so it lands
+        # verbatim in the binary script — same string the server
+        # got in ov.conf.
         ExecStart = pkgs.writeShellScript "render-client-env" ''
           set -euo pipefail
           mkdir -p /var/lib/openviking-server
-          KEY=""
+          # Bearer chosen by the Nix module at eval time. The chosen
+          # literal is either ovConfig.server.root_api_key (when
+          # set to a real string) or the apiKeyFile content; the
+          # placeholder "__read_from_file__" forces the latter.
+          BEARER=${lib.escapeShellArg (
+            let
+              rak = cfg.ovConfig.server.root_api_key or null;
+            in
+            if rak == "__read_from_file__" || rak == null || rak == ""
+            then "__literal_from_runtime__"  # marker, replaced below
+            else rak
+          )}
+          # Bash below: when BEARER is "__literal_from_runtime__", fall
+          # back to apiKeyFile contents.
           SRC=${lib.escapeShellArg (toString cfg.apiKeyFile)}
-          if grep -qE '^GOOGLE_API_KEY=' "$SRC"; then
-            KEY=$(grep -E '^GOOGLE_API_KEY=' "$SRC" | head -n1 | cut -d= -f2- | tr -d '\n')
-          elif grep -qE '^OPENAI_API_KEY=' "$SRC"; then
-            KEY=$(grep -E '^OPENAI_API_KEY=' "$SRC" | head -n1 | cut -d= -f2- | tr -d '\n')
-          else
-            KEY=$(cat "$SRC" | tr -d '\n')
+          if [ "$BEARER" = "__literal_from_runtime__" ]; then
+            if [ ! -e "$SRC" ]; then
+              echo "apiKeyFile $SRC not found" >&2
+              exit 1
+            fi
+            if grep -qE '^GOOGLE_API_KEY=' "$SRC"; then
+              BEARER=$(grep -E '^GOOGLE_API_KEY=' "$SRC" | head -n1 | cut -d= -f2- | tr -d '\n')
+            elif grep -qE '^OPENAI_API_KEY=' "$SRC"; then
+              BEARER=$(grep -E '^OPENAI_API_KEY=' "$SRC" | head -n1 | cut -d= -f2- | tr -d '\n')
+            else
+              BEARER=$(cat "$SRC" | tr -d '\n')
+            fi
           fi
-          if [ -z "$KEY" ]; then
-            echo "No API key found in $SRC" >&2
+          if [ -z "$BEARER" ]; then
+            echo "Empty bearer — check ovConfig.server.root_api_key and apiKeyFile" >&2
             exit 1
           fi
           cat > /var/lib/openviking-server/client.env <<EOF
@@ -442,7 +488,7 @@ in
           OPENVIKING_ACCOUNT=default
           OPENVIKING_USER=default
           OPENVIKING_AGENT=hermes
-          OPENVIKING_API_KEY=$KEY
+          OPENVIKING_API_KEY=$BEARER
           EOF
           chmod 0644 /var/lib/openviking-server/client.env
           echo "render-client-env: wrote $(stat -c %s /var/lib/openviking-server/client.env) bytes" >&2
