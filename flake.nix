@@ -48,15 +48,28 @@
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
 
+      # See modules/revision.nix for the env vars these fields come from.
+      gitMeta = let
+        envRev = builtins.getEnv "NIXOS_GIT_REVISION";
+      in {
+        rev = envRev;
+        shortRev =
+          if builtins.stringLength envRev >= 7
+          then builtins.substring 0 7 envRev
+          else "";
+        branch = builtins.getEnv "NIXOS_GIT_BRANCH";
+        dirty = (builtins.getEnv "NIXOS_GIT_DIRTY") == "1";
+        url = builtins.getEnv "NIXOS_GIT_URL";
+      };
+
       mkHost =
         hostName:
         nixpkgs.lib.nixosSystem {
           inherit system;
           specialArgs = {
-            inherit self nix-flatpak nixpkgs-unstable hermes-agent;
+            inherit self gitMeta nix-flatpak nixpkgs-unstable hermes-agent;
           };
           modules = [
-            ./modules/revision.nix
             ./modules/auto.nix
             ./hosts/${hostName}/default.nix
             ./modules/default.nix
