@@ -29,7 +29,7 @@
   # ▸ Импорт auto-detected hardware config
   imports = [
     ./hardware-configuration.nix
-    ./hermes.nix
+    ./hermes
   ];
 
   # ▸ auto — конфигурация этого хоста
@@ -76,14 +76,12 @@
     desktop = true;
     laptop = true;
 
-    # OpenViking is intentionally disabled while the integration
-    # is redesigned. See README.md / AGENTS.md for the standalone
-    # compose path at ~/openviking/ — that's the supported way
-    # to run it for now. Nix-side `services.openviking` and
-    # `services.openviking-bootstrap` modules stay in the tree
-    # in case we want to revive the Nix-driven path later, but
-    # no systemd units are auto-started.
-    openviking.enable = false;
+    # OpenViking self-hosted context database. Bound to 127.0.0.1
+    # only (container network=host + OPENVIKING_SERVER_HOST=127.0.0.1).
+    # Outbound traffic to Google's embedding + VLM endpoints goes
+    # through the host proxy (default). hermes-agent reads
+    # /opt/openviking/keys/user_key via EnvironmentFile.
+    openviking.enable = true;
     hermes-host-privs.enable = false;
 
     # xserver.enable = true; @ Wayland in gnome
@@ -126,9 +124,13 @@
     ];
   };
 
-  # Bootstrap only needed for api_key/trusted mode (Admin API
-  # user_key minting). Currently dev mode — disable.
-  services.openviking-bootstrap.enable = false;
+  # OpenViking API key for Google's embedding + VLM endpoints.
+  # Read from a secret file outside the repo (alongside other
+  # sops secrets). The Nix module bakes the value into ov.conf
+  # at activation time. Rotation workflow: replace this file
+  # and re-run `nix build .#aleroza-pc` + the user's switch.
+  services.openviking.embedding.apiKey =
+    builtins.readFile ../../secrets/openviking-google-api-key;
 
   # ▸ Display manager override (DE модули ставят user = "", перебиваем тут)
   services.displayManager.autoLogin.user = lib.mkForce "aleroza";
@@ -202,7 +204,7 @@
     description = "OpenClaw service account";
   };
 
-  # Hermes user/services/units live in hermes.nix (imported above).
+  # Hermes user/services/units live in hermes/ (imported above).
 
   # ▸ Shell-алиасы
   environment.shellAliases = {
@@ -302,5 +304,5 @@
   };
 
   # Hermes-triggered system activation (nixos-activate.service +
-  # nixos-activate-trigger.path) lives in hermes.nix.
+  # nixos-activate-trigger.path) lives in hermes/ (imported above).
 }

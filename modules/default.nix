@@ -21,7 +21,6 @@
     ./docker.nix
     ./network-capture.nix
     ./services/openviking.nix
-    ./services/openviking-bootstrap.nix
     ./services/hermes-host-privs.nix
   ];
 }

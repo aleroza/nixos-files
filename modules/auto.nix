@@ -200,26 +200,14 @@ in
           memory.provider is set to "openviking".
         '';
       };
-      openFirewall = mkOption {
-        type = types.bool;
-        default = false;
-        description = ''
-          Whether to expose the OpenViking port (1933) on the
-          firewall. Off by default — the server binds to
-          127.0.0.1 only, so firewall rules are usually
-          unnecessary.
-        '';
-      };
       proxyUrl = mkOption {
         type = types.nullOr types.str;
-        default = null;
+        default = "http://127.0.0.1:7890";
         example = "http://127.0.0.1:7890";
         description = ''
-          HTTP/HTTPS proxy URL for OpenViking's outbound traffic
-          (Gemini API, VLM API). null means direct connection.
-          Set this when the host's egress IP is rejected by the
-          upstream provider or you want all traffic funneled
-          through the same proxy as hermes-agent.
+          HTTP proxy for OpenViking's outbound traffic to Google
+          (embedding + VLM). Default keeps the host's local
+          proxy; set null to disable.
         '';
       };
     };
