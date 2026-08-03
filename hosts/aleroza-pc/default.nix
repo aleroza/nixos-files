@@ -76,20 +76,15 @@
     desktop = true;
     laptop = true;
 
-    openviking = {
-      enable = true;
-      # Route OpenViking's outbound traffic through the same
-      # proxy that hermes-agent uses. Necessary for the Google
-      # AI Studio endpoint when Gemini rejects the host's
-      # direct egress IP (e.g. shared/cloud hosting).
-      proxyUrl = "http://127.0.0.1:7890";
-    };
-
-    # TEMPORARY hermes-host sudo allowlist + NNP override —
-    # see modules/services/hermes-host-privs.nix and security.sudo
-    # allowlist in hermes.nix. Switch off once OpenViking
-    # integration has a path-anchored approval flow.
-    hermes-host-privs.enable = true;
+    # OpenViking is intentionally disabled while the integration
+    # is redesigned. See README.md / AGENTS.md for the standalone
+    # compose path at ~/openviking/ — that's the supported way
+    # to run it for now. Nix-side `services.openviking` and
+    # `services.openviking-bootstrap` modules stay in the tree
+    # in case we want to revive the Nix-driven path later, but
+    # no systemd units are auto-started.
+    openviking.enable = false;
+    hermes-host-privs.enable = false;
 
     # xserver.enable = true; @ Wayland in gnome
     gnome = {

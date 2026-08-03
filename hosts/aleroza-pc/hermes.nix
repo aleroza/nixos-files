@@ -95,33 +95,13 @@
       is reversible without sudo and continues to auto-approve.
     '';
 
-    # Memory: route through OpenViking (services.openviking on
-    # 127.0.0.1:1933, see modules/services/openviking.nix). The
-    # built-in MEMORY.md/USER.md files stay active — OpenViking
-    # is additive, never a replacement.
-    settings.memory = {
-      provider = "openviking";
-      userProfileEnabled = true;
-    };
-    # Merge OPENVIKING_* env vars into the gateway's environment
-    # so the openviking client picks up the endpoint. We don't
-    # add a new EnvironmentFile because hermes-agent.service
-    # already has one; we just merge at the systemd level via
-    # the module's Environment= (merged below).
-    environment = {
-      OPENVIKING_ENDPOINT = "http://127.0.0.1:1933";
-      OPENVIKING_ACCOUNT = "default";
-      OPENVIKING_USER = "default";
-      OPENVIKING_AGENT = "hermes";
-      # dev mode — no api_key needed. The OpenViking server's
-      # auth_mode=dev mode accepts any (or no) bearer for localhost
-      # bind. hermes-agent doesn't need OPENVIKING_API_KEY; the
-      # simpler `CLIENT_ARGS=--user=default --account=default` (or
-      # equivalent env vars) is enough to identify the actor.
-      # Plaintext placeholder kept in case upstream flips back
-      # to api_key mode without warning.
-      OPENVIKING_API_KEY = "dev-mode-no-key-required";
-    };
+    # Memory: native MEMORY.md / USER.md only. OpenViking
+    # memory-provider integration is temporarily disabled
+    # while we redesign the deployment (standalone compose
+    # under ~/openviking/, see hosts/aleroza-pc/README.md).
+    # Once that's stable we'll re-wire this and gate it on
+    # a runtime probe of the OpenViking endpoint so a dead
+    # upstream doesn't break the gateway.
 
     # Fix "ModuleNotFoundError: No module named 'hermes_state_common'"
     package =
