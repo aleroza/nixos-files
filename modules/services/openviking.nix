@@ -233,6 +233,16 @@ in
       "d /opt/openviking/keys 0750 openviking openviking - -"
     ];
 
+
+    # Podman refuses to pull images from registries that require
+    # signature verification (ghcr.io is one) without a policy.json.
+    # We accept any signed image for now — this is a single-host
+    # single-user box. Lock down if we ever expose the registry
+    # config to a less-trusted image source.
+    environment.etc."containers/policy.json".text = builtins.toJSON {
+      default = [{ type = "insecureAcceptAnything"; }];
+    };
+
     # Server container. Run as root so podman doesn't need
     # rootless setup (subuid/subgid for the openviking user).
     # The container bind-mounts /opt/openviking/data and
