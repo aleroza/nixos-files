@@ -141,7 +141,7 @@ in
 
     image = lib.mkOption {
       type = lib.types.str;
-      default = "openviking/openviking:v0.4.7.dev6";
+      default = "docker.io/openviking/openviking:v0.4.7.dev6";
       description = "Container image to run.";
     };
 
