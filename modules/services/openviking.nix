@@ -61,7 +61,7 @@ let
       exit 1
     fi
 
-    JSON=$(jq -n \
+    JSON=$(${pkgs.jq}/bin/jq -n \
       --arg root_key "${rootApiKey}" \
       --arg embed_key "$API_KEY" \
       --arg embed_model "${cfg.embedding.model}" \
@@ -289,7 +289,7 @@ in
 
         # Wait for the server to come up.
         for _ in $(seq 1 60); do
-          if curl -fsS --max-time 2 "$ENDPOINT/health" >/dev/null 2>&1; then
+          if ${pkgs.curl}/bin/curl -fsS --max-time 2 "$ENDPOINT/health" >/dev/null 2>&1; then
             break
           fi
           sleep 1
@@ -297,10 +297,10 @@ in
 
         # Read root_api_key from the rendered ov.conf.json
         # (chmod 0640 openviking:openviking, we own the file).
-        ROOT_KEY=$(jq -r '.server.root_api_key' /opt/openviking/data/ov.conf.json)
+        ROOT_KEY=$(${pkgs.jq}/bin/jq -r '.server.root_api_key' /opt/openviking/data/ov.conf.json)
 
         # 1. Ensure account exists. 409 ALREADY_EXISTS is fine.
-        code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+        code=$(${pkgs.curl}/bin/curl -s -o /dev/null -w '%{http_code}' -X POST \
           -H "Authorization: Bearer ***" \
           -H "Content-Type: application/json" \
           -d '{"account_id":"default","admin_user_id":"default"}' \
@@ -313,12 +313,12 @@ in
         # 2. Mint user_key. Server returns the existing key if
         # the user is already registered, so this is idempotent
         # without invalidating prior keys.
-        USER_KEY=$(curl -fsS -X POST \
+        USER_KEY=$(${pkgs.curl}/bin/curl -fsS -X POST \
           -H "Authorization: Bearer ***" \
           -H "Content-Type: application/json" \
           -d '{"user_id":"default","role":"user"}' \
           "$ENDPOINT/api/v1/admin/accounts/default/users" \
-          | jq -r '.result.user_key')
+          | ${pkgs.jq}/bin/jq -r '.result.user_key')
 
         if [[ -z "$USER_KEY" || "$USER_KEY" == "null" ]]; then
           echo "openviking-bootstrap: empty user_key in response" >&2
