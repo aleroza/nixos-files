@@ -253,7 +253,7 @@ in
         RestartSec = 5;
         User = "root";
         WorkingDirectory = "/opt/openviking/data";
-        EnvironmentFile = /opt/openviking/data/ov.conf.env;
+        EnvironmentFile = "-/opt/openviking/data/ov.conf.env";
         ExecStartPre = renderConfScript;
         ExecStart = runScript;
         ExecStop = "-${pkgs.podman}/bin/podman stop openviking-server";
