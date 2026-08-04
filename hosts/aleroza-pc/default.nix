@@ -124,13 +124,9 @@
     ];
   };
 
-  # OpenViking API key for Google's embedding + VLM endpoints.
-  # Read from a secret file outside the repo (alongside other
-  # sops secrets). The Nix module bakes the value into ov.conf
-  # at activation time. Rotation workflow: replace this file
-  # and re-run `nix build .#aleroza-pc` + the user's switch.
-  services.openviking.embedding.apiKey =
-    builtins.readFile ../../secrets/openviking-google-api-key;
+  # OpenViking reads the Google API key itself at activation
+  # time from the sops secret at /run/secrets/hermes/GOOGLE_API_KEY.
+  # The path is configured via services.openviking.embedding.apiKeyFile.
 
   # ▸ Display manager override (DE модули ставят user = "", перебиваем тут)
   services.displayManager.autoLogin.user = lib.mkForce "aleroza";
