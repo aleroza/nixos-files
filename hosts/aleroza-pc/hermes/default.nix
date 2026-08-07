@@ -148,21 +148,26 @@
   # proper path-anchored approval flow yet
   # (NosResearch/hermes-agent#5528), hermes acts on the agent's
   # behalf for any admin-level task via this single allowlist.
-  # security.sudo.extraRules gates which exact commands run;
-  # the modules/services/hermes-host-privs.nix module disables
-  # NoNewPrivileges + ProtectSystem on hermes-agent.service so
-  # the gated sudo rules actually escalate at runtime.
-  #
-  # Alongside this we have modules/services/hermes-host-privs.nix
-  # which (a) flips NoNewPrivileges off on hermes-agent.service
-  # and (b) forces ProtectSystem=no so /run is writable for
-  # sudo's per-uid timestamp files.
+  # security.sudo.extraRules gates which exact commands run.
+  # The sudo escalation itself is enabled by force-disabling
+  # NoNewPrivileges + ProtectSystem on hermes-agent.service
+  # below — see the comment block further down.
   security.sudo.extraRules = [
     {
       users = [ "hermes" ];
       commands = [ { command = "ALL"; options = [ "NOPASSWD" ]; } ];
     }
   ];
+
+  # Force-disable NoNewPrivileges + ProtectSystem on hermes-agent so
+  # the sudo allowlist above actually escalates. The upstream
+  # hermes-agent NixOS module sets NNP=true (no privilege gain after
+  # exec) and ProtectSystem=strict (read-only /run). Both block sudo
+  # from doing anything useful: NNP halts the setuid binary, and a
+  # read-only /run breaks sudo per-uid timestamp files.
+  # Units that hermes-agent itself spawns keep their full hardening.
+  systemd.services.hermes-agent.serviceConfig.NoNewPrivileges = lib.mkForce false;
+  systemd.services.hermes-agent.serviceConfig.ProtectSystem = lib.mkForce "no";
 
   # ▸ 4. Hermes-triggered system activation.
   #    Root systemd unit + path trigger so hermes can switch
