@@ -254,7 +254,7 @@ in
     virtualisation.oci-containers.containers.openviking = {
       image = cfg.image;
       volumes = [
-        "${cfg.dataDir}:/data"
+        "${cfg.dataDir}:/app/.openviking"
       ];
       environment = {
         OPENVIKING_SERVER_HOST = "127.0.0.1";
