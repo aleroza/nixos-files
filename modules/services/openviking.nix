@@ -256,6 +256,7 @@ in
     # below reference the stable /opt/openviking/*.sh paths.
     virtualisation.oci-containers.containers.openviking = {
       image = cfg.image;
+      extraOptions = [ "--network=host" ];
       volumes = [
         "${cfg.dataDir}:/app/.openviking"
       ];
