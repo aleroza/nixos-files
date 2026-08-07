@@ -233,7 +233,7 @@ in
       isSystemUser = true;
       group = "openviking";
     };
-    users.users.hermes.extraGroups = [ "openviking" ];
+    # (users.users.hermes.extraGroups = [ "openviking" ] moved to hermes/default.nix)
 
     # Persistent dirs + host-side hook scripts. tmpfiles rules
     # land the scripts on every boot so the unit's stable paths
