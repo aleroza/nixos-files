@@ -105,7 +105,14 @@ let
   '';
 
   runScript = pkgs.writeShellScript "openviking-server-run" ''
-    set -euo pipefail
+    # Pre-clean: ensure no stale container holds the port. The
+    # `--replace` flag should do this, but on restart=always loops
+    # the previous container can hold the socket long enough that
+    # the new bind attempt fails with EADDRINUSE. Stop+remove
+    # explicitly and wait for the port to free.
+    ${pkgs.podman}/bin/podman stop openviking-server 2>/dev/null || true
+    ${pkgs.podman}/bin/podman rm -f openviking-server 2>/dev/null || true
+    sleep 2
     DECODED=$(printf '%s' "$OPENVIKING_CONF_CONTENT_B64" | ${pkgs.coreutils}/bin/base64 -d)
     PROXY_ARGS=()
     ${lib.optionalString (cfg.proxyUrl != null) ''
@@ -285,7 +292,10 @@ in
       after = [ "openviking-server.service" ];
       wants = [ "openviking-server.service" ];
       serviceConfig = {
-        Type = "oneshot";
+        Restart = "on-failure";
+        RestartSec = 10;
+        StartLimitBurst = 30;
+        StartLimitIntervalSec = 300;
         RemainAfterExit = true;
         User = "openviking";
         Group = "openviking";
