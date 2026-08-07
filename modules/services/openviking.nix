@@ -121,6 +121,17 @@ let
     ENDPOINT=http://127.0.0.1:${toString cfg.port}
     KEY_FILE=${cfg.keysDir}/user_key
 
+    # Wait for /health to return ok. Upstream entrypoint reports a placeholder
+    # 503 until ov.conf is detected and the real openviking-server has taken
+    # over the socket. POSTs to /api/v1/admin/accounts before that transition
+    # get 401 Invalid API Key. Poll for up to 60 seconds.
+    for _ in $(seq 1 60); do
+      if ${pkgs.curl}/bin/curl -fsS --max-time 2 "$ENDPOINT/health" 2>/dev/null | grep -q '"status":"ok"'; then
+        break
+      fi
+      sleep 1
+    done
+
     ROOT_KEY=$(${pkgs.jq}/bin/jq -r '.server.root_api_key' /opt/openviking/data/ov.conf.json)
 
     # 1. Ensure account exists. 409 ALREADY_EXISTS is fine.
