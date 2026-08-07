@@ -278,10 +278,10 @@ in
       serviceConfig = {
         Restart = "on-failure";
         RestartSec = "30s";
-        startLimitBurst = 20;
-        startLimitIntervalSec = "10min";
       };
       preStart = "/opt/openviking/preStart.sh";
+      startLimitBurst = 20;
+      startLimitIntervalSec = 600;
       postStart = "/opt/openviking/execStartPost.sh";
     };
   };
