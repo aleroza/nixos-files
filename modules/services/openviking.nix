@@ -253,7 +253,6 @@ in
     # below reference the stable /opt/openviking/*.sh paths.
     virtualisation.oci-containers.containers.openviking = {
       image = cfg.image;
-      imageFile = pkgs.writeText "openviking-image-tag" cfg.image;
       volumes = [
         "${cfg.dataDir}:/data"
       ];
