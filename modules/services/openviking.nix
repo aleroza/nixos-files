@@ -103,6 +103,9 @@ let
     printf '%s' "$JSON" > /opt/openviking/data/ov.conf.json
     chmod 0640 /opt/openviking/data/ov.conf.json
     chown openviking:openviking /opt/openviking/data/ov.conf.json
+    cp /opt/openviking/data/ov.conf.json /opt/openviking/data/ov.conf
+    chmod 0640 /opt/openviking/data/ov.conf
+    chown openviking:openviking /opt/openviking/data/ov.conf
     B64=$(printf '%s' "$JSON" | ${pkgs.coreutils}/bin/base64 -w0)
     printf 'OPENVIKING_CONF_CONTENT_B64=%s\n' "$B64" > "$KEY_FILE"
     chmod 0640 "$KEY_FILE"
