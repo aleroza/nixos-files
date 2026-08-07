@@ -82,7 +82,6 @@
     # through the host proxy (default). hermes-agent reads
     # /opt/openviking/keys/user_key via EnvironmentFile.
     openviking.enable = true;
-    hermes-host-privs.enable = true;
 
     # xserver.enable = true; @ Wayland in gnome
     gnome = {
