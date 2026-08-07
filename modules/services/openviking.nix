@@ -227,7 +227,7 @@ in
     users.users.openviking = {
       isSystemUser = true;
       group = "openviking";
-      uid = 989;
+      # NixOS auto-assigns an unused uid for isSystemUser=true.
     };
     users.users.hermes.extraGroups = [ "openviking" ];
 
