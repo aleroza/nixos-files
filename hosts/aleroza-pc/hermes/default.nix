@@ -75,6 +75,10 @@
       OPENVIKING_AGENT = "hermes";
     };
     settings.model = "minimax/MiniMax-M3";
+    # Sub-agents inherit delegation.model from settings; primary session
+    # keeps settings.model above. Hyp: upstream module accepts unknown
+    # sub-keys and merges them into the gateway user-level YAML.
+    settings.delegation.model = "minimax/MiniMax-M2.7";
     settings.toolsets = [ "all" ];
     settings.approvals.smartPolicy = ''
       ESCALATE any command whose argument list, after shell
