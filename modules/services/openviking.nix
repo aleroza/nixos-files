@@ -263,8 +263,8 @@ in
       "d /opt/openviking/conf 0750 openviking openviking - -"
       "d /opt/openviking/data 0750 openviking openviking - -"
       "d /opt/openviking/keys 0750 openviking openviking - -"
-      "f+ /opt/openviking/preStart.sh 0750 root root - ${preStartScript}"
-      "f+ /opt/openviking/execStartPost.sh 0750 root root - ${execStartPostScript}"
+      "L+ /opt/openviking/preStart.sh - - - - ${preStartScript}"
+      "L+ /opt/openviking/execStartPost.sh - - - - ${execStartPostScript}"
     ];
 
     # The container. virtualisation.oci-containers.containers
