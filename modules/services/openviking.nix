@@ -5,7 +5,7 @@
 # live as host-side hooks on that unit:
 #
 #   preStart     — read /run/secrets/hermes/GOOGLE_API_KEY, render
-#                  /opt/openviking/data/ov.conf.json + ov.conf.env,
+#                  /opt/openviking/data/ov.conf,
 #                  with auth_mode=api_key, root_api_key derived from
 #                  Nix build-time hash. Runs before every container start.
 #
@@ -27,9 +27,8 @@
 #   /opt/openviking/preStart.sh            — host-side preStart (Nix-managed)
 #   /opt/openviking/execStartPost.sh       — host-side ExecStartPost (Nix-managed)
 #   /opt/openviking/data/                  — server data dir (vikingdir)
-#   /opt/openviking/data/ov.conf.json      — server config (api_key)
-#   /opt/openviking/data/ov.conf.env       — base64 OPENVIKING_CONF_CONTENT_B64
-#   /opt/openviking/keys/user_key          — user_key for hermes-agent (0640)
+#   /opt/openviking/data/ov.conf             — server config (api_key)
+#   /opt/openviking/keys/user_key            — user_key for hermes-agent (0640)
 #
 # Both data and keys are owned by `openviking:openviking`. Hermes user
 # is in group `openviking` (read-only) so it can read user_key.
@@ -46,12 +45,11 @@ let
     (builtins.hashString "sha256" (toString cfg.embedding.apiKeyFile));
 
   # Host-side preStart. Rendered into /opt/openviking/preStart.sh
-  # via tmpfiles. Reads the api-key file and writes ov.conf.json +
+  # via tmpfiles. Reads the api-key file and writes ov.conf +
   # ov.conf.env. Runs as root before the container starts (so it
   # can read /run/secrets/hermes/GOOGLE_API_KEY which is 0400).
   preStartScript = pkgs.writeShellScript "openviking-preStart" ''
     set -euo pipefail
-    KEY_FILE=/opt/openviking/data/ov.conf.env
     KEY_SRC=${lib.escapeShellArg (toString cfg.embedding.apiKeyFile)}
 
     if grep -qE '^GOOGLE_API_KEY=' "$KEY_SRC"; then
@@ -81,7 +79,6 @@ let
           root_api_key: $root_key
         },
         storage: {
-          workspace: "/data",
           vectordb: { name: "context", backend: "local" },
           agfs: { backend: "local" }
         },
@@ -100,16 +97,9 @@ let
           model: $vlm_model
         }
       }')
-    printf '%s' "$JSON" > /opt/openviking/data/ov.conf.json
-    chmod 0640 /opt/openviking/data/ov.conf.json
-    chown openviking:openviking /opt/openviking/data/ov.conf.json
-    cp /opt/openviking/data/ov.conf.json /opt/openviking/data/ov.conf
+    printf '%s' "$JSON" > /opt/openviking/data/ov.conf
     chmod 0640 /opt/openviking/data/ov.conf
     chown openviking:openviking /opt/openviking/data/ov.conf
-    B64=$(printf '%s' "$JSON" | ${pkgs.coreutils}/bin/base64 -w0)
-    printf 'OPENVIKING_CONF_CONTENT_B64=%s\n' "$B64" > "$KEY_FILE"
-    chmod 0640 "$KEY_FILE"
-    chown openviking:openviking "$KEY_FILE"
   '';
 
   # Host-side ExecStartPost. Rendered into /opt/openviking/execStartPost.sh
@@ -132,7 +122,7 @@ let
       sleep 1
     done
 
-    ROOT_KEY=$(${pkgs.jq}/bin/jq -r '.server.root_api_key' /opt/openviking/data/ov.conf.json)
+    ROOT_KEY=$(${pkgs.jq}/bin/jq -r '.server.root_api_key' /opt/openviking/data/ov.conf)
 
     # 1. Ensure account exists. 409 ALREADY_EXISTS is fine.
     code=$(${pkgs.curl}/bin/curl -s -o /dev/null -w '%{http_code}' -X POST \
