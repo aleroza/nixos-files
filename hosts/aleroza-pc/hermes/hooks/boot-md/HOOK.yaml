@@ -1,0 +1,4 @@
+name: boot-md
+description: Probe OpenViking on every gateway startup and notify on degradation.
+events:
+  - gateway:startup

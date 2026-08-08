@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Wrapper around `nixos-rebuild` that populates NIXOS_GIT_* env vars from the
+# current git checkout before delegating to nixos-rebuild. Used by humans
+# (alias) and by the agent (see AGENTS.md "Build & Validate").
+#
+# What it does:
+#   1. Detects the repo root from $PWD (walks up until .git/ is found).
+#   2. Reads HEAD sha, branch, dirty, and `git remote get-url origin`.
+#   3. Exports NIXOS_GIT_{REVISION,BRANCH,DIRTY,URL} so modules/revision.nix
+#      can surface them in `nixos-version --configuration-revision` and
+#      /etc/os-release.
+#   4. Adds --impure to the nixos-rebuild invocation so `builtins.getEnv`
+#      returns our values at evaluation time. Without --impure Nix strips
+#      these from the evaluator and gitMeta collapses to empty strings.
+#
+# Usage:
+#   nixos-rebuild-meta switch --flake .#aleroza-pc
+#   nixos-rebuild-meta dry-activate --flake .#aleroza-pc
+#   nixos-rebuild-meta build --flake .#aleroza-pc
+#
+# Arguments after the action are passed verbatim to nixos-rebuild. We do
+# NOT touch secrets, credentials, or any other state.
+
+set -euo pipefail
+
+# Find the repo root by walking up from $PWD.
+dir="${PWD}"
+while [ ! -e "$dir/.git" ] && [ "$dir" != "/" ]; do
+  dir=$(dirname "$dir")
+done
+if [ ! -e "$dir/.git" ]; then
+  echo "nixos-rebuild-meta: not inside a git working tree" >&2
+  exit 2
+fi
+
+rev=$(git -C "$dir" rev-parse HEAD 2>/dev/null || echo "")
+branch=$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "detached")
+if [ -n "$(git -C "$dir" status --porcelain 2>/dev/null)" ]; then
+  dirty=1
+else
+  dirty=0
+fi
+url=$(git -C "$dir" config --get remote.origin.url 2>/dev/null \
+      || git -C "$dir" config --get remote.upstream.url 2>/dev/null \
+      || echo "")
+
+export NIXOS_GIT_REVISION="$rev"
+export NIXOS_GIT_BRANCH="$branch"
+export NIXOS_GIT_DIRTY="$dirty"
+export NIXOS_GIT_URL="$url"
+
+# Inject --impure unless the caller already passed it.
+args=("$@")
+has_impure=0
+for a in "${args[@]}"; do
+  if [ "$a" = "--impure" ]; then has_impure=1; break; fi
+done
+if [ "$has_impure" -eq 0 ]; then args=("--impure" "${args[@]}"); fi
+
+# Hand off to the real nixos-rebuild. If it isn't on PATH (e.g. running as
+# a non-root user before sudo), fall back to sudo -E so the env survives.
+if command -v nixos-rebuild >/dev/null 2>&1; then
+  exec nixos-rebuild "${args[@]}"
+else
+  exec sudo -E nixos-rebuild "${args[@]}"
+fi

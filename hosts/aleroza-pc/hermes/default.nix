@@ -1,17 +1,18 @@
 # Hermes integration for aleroza-pc.
 #
 # Consolidates everything hermes-related into one file so the host's
-# default.nix stays focused on the host itself (users, packages,
-# hardware, auto.* flags). See hosts/aleroza-pc/README.md for the
-# full rationale and workflow.
+# default.nix stays focused on the host itself. This module lives in
+# hosts/aleroza-pc/hermes/ alongside BOOT.md and any gateway hooks we
+# drop in. See hosts/aleroza-pc/README.md for the full rationale.
 #
 # Sections:
 #   1. Hermes system user (extraGroups).
 #   2. Hermes sops secret — environment variables the gateway needs
 #      (API keys, etc.). Owned by hermes:hermes so the gateway can
 #      read it.
-#   3. services.hermes-agent — gateway service itself: model,
-#      proxy, runtime hooks for missing-python-modules workaround.
+#   3. services.hermes-agent — gateway service itself: model, proxy,
+#      memory provider, runtime hooks for missing-python-modules
+#      workaround.
 #   4. nixos-activate systemd unit + path trigger — root unit that
 #      promotes a hermes-built closure into the active system on
 #      /var/lib/hermes/workspace/.switch-request.
@@ -20,10 +21,12 @@
 
 {
   # ▸ 1. Hermes system user (created by hermes-agent NixOS module).
-  #    `systemd-journal` so the gateway can read its own logs
-  #    without sudo.
+  #    systemd-journal so the gateway can read its own logs without
+  #    sudo. openviking so the gateway can read the user_key env-file
+  #    at /opt/openviking/keys/user_key (mode 0640 openviking:openviking).
   users.users.hermes.extraGroups = [
     "systemd-journal"
+    "openviking"
   ];
 
   # ▸ 2. Hermes environment secret.
@@ -31,7 +34,7 @@
   #    aleroza's secrets — the key is shared with aleroza). Owned
   #    by hermes:hermes so the gateway can read it directly.
   sops.secrets."hermes/env" = {
-    sopsFile = ./secrets/users/aleroza.yaml;
+    sopsFile = ../secrets/users/aleroza.yaml;
     owner = "hermes";
     group = "hermes";
     mode = "0400";
@@ -41,7 +44,17 @@
   services.hermes-agent = {
     enable = true;
     addToSystemPackages = true;
-    environmentFiles = [ "/run/secrets/hermes/env" ];
+
+    # EnvironmentFiles are loaded in order. Later entries overwrite
+    # earlier ones on duplicate KEYs. The first one is the
+    # user-managed sops env (TELEGRAM_BOT_TOKEN, etc.). The second
+    # is the OpenViking user_key written by services.openviking-
+    # bootstrap (mode 0640 openviking:openviking, hermes user is
+    # in group openviking for read access).
+    environmentFiles = [
+      "/run/secrets/hermes/env"
+      "/opt/openviking/keys/user_key"
+    ];
     environment = {
       HTTP_PROXY = "http://127.0.0.1:7890";
       HTTPS_PROXY = "http://127.0.0.1:7890";
@@ -51,8 +64,20 @@
       all_proxy = "http://127.0.0.1:7890";
       NO_PROXY = "127.0.0.1,localhost,::1";
       no_proxy = "127.0.0.1,localhost,::1";
+      # OpenViking client connection. Endpoint is the container
+      # bound to 127.0.0.1:1933 (host network mode + server bind
+      # override). OPENVIKING_API_KEY is provided by the second
+      # EnvironmentFile above. ACCOUNT / USER are local-mode
+      # identifiers the server uses to scope data.
+      OPENVIKING_ENDPOINT = "http://127.0.0.1:1933";
+      OPENVIKING_ACCOUNT = "default";
+      OPENVIKING_USER = "default";
     };
     settings.model = "minimax/MiniMax-M3";
+    # Sub-agents inherit delegation.model from settings; primary session
+    # keeps settings.model above. Hyp: upstream module accepts unknown
+    # sub-keys and merges them into the gateway user-level YAML.
+    settings.delegation.model = "minimax/MiniMax-M2.7";
     settings.toolsets = [ "all" ];
     settings.approvals.smartPolicy = ''
       ESCALATE any command whose argument list, after shell
@@ -81,6 +106,20 @@
       is reversible without sudo and continues to auto-approve.
     '';
 
+    # Memory provider: OpenViking. The plugin in upstream
+    # hermes-agent reads OPENVIKING_* env from environmentFiles +
+    # settings. Built-in MEMORY.md / USER.md stay active alongside
+    # — OpenViking is additive.
+    #
+    # If the OpenViking server is unreachable at gateway startup,
+    # the plugin logs a WARNING and the gateway continues with
+    # degraded memory (built-in only). The boot-md hook drops a
+    # Telegram notification so the user knows the upstream is
+    # broken. Restart hermes-agent once the server is healthy and
+    # the plugin reconnects.
+    settings.memory.provider = "openviking";
+    settings.memory.userProfileEnabled = true;
+
     # Fix "ModuleNotFoundError: No module named 'hermes_state_common'"
     package =
       let
@@ -107,6 +146,31 @@
         '';
       });
   };
+
+  # Simple, wide sudo allowlist for hermes. While we don't have
+  # proper path-anchored approval flow yet
+  # (NosResearch/hermes-agent#5528), hermes acts on the agent's
+  # behalf for any admin-level task via this single allowlist.
+  # security.sudo.extraRules gates which exact commands run.
+  # The sudo escalation itself is enabled by force-disabling
+  # NoNewPrivileges + ProtectSystem on hermes-agent.service
+  # below — see the comment block further down.
+  security.sudo.extraRules = [
+    {
+      users = [ "hermes" ];
+      commands = [ { command = "ALL"; options = [ "NOPASSWD" ]; } ];
+    }
+  ];
+
+  # Force-disable NoNewPrivileges + ProtectSystem on hermes-agent so
+  # the sudo allowlist above actually escalates. The upstream
+  # hermes-agent NixOS module sets NNP=true (no privilege gain after
+  # exec) and ProtectSystem=strict (read-only /run). Both block sudo
+  # from doing anything useful: NNP halts the setuid binary, and a
+  # read-only /run breaks sudo per-uid timestamp files.
+  # Units that hermes-agent itself spawns keep their full hardening.
+  systemd.services.hermes-agent.serviceConfig.NoNewPrivileges = lib.mkForce false;
+  systemd.services.hermes-agent.serviceConfig.ProtectSystem = lib.mkForce "no";
 
   # ▸ 4. Hermes-triggered system activation.
   #    Root systemd unit + path trigger so hermes can switch
@@ -230,5 +294,36 @@
     # + .pending-switch freshness, so the rate limit adds nothing.
     unitConfig.TriggerLimitIntervalSec = 0;
     wantedBy = [ "paths.target" ];
+  };
+
+  # ▸ 5. Hermes Agent gateway hooks.
+  #    Drop-in directory under ~/.hermes/hooks/. Each subdir with
+  #    HOOK.yaml + handler.<ext> is loaded by the gateway on
+  #    startup. The boot-md hook probes OpenViking at gateway
+  #    startup and notifies the first user in TELEGRAM_ALLOWED_USERS
+  #    if the upstream is degraded.
+  #
+  #    Rendered from this source tree at activation time. The hooks
+  #    land at /var/lib/hermes/.hermes/hooks/ (system user's
+  #    HERMES_HOME).
+  system.activationScripts."hermes-boot-md" = {
+    text = ''
+      # Source tree is ${./hooks}, target is /var/lib/hermes/.hermes/hooks.
+      # The .hermes tree is owned by hermes:hermes (set up by
+      # services.hermes-agent's own activation script). We just
+      # need to copy the boot-md subdir.
+      mkdir -p /var/lib/hermes/.hermes/hooks
+      cp -r ${./hooks}/boot-md /var/lib/hermes/.hermes/hooks/boot-md
+      chmod 0750 /var/lib/hermes/.hermes/hooks/boot-md
+      chmod 0640 /var/lib/hermes/.hermes/hooks/boot-md/HOOK.yaml
+      chmod 0750 /var/lib/hermes/.hermes/hooks/boot-md/handler.sh
+      chown -R hermes:hermes /var/lib/hermes/.hermes/hooks
+
+      # Drop BOOT.md next to the hook so humans can read it.
+      cp ${./BOOT.md} /var/lib/hermes/.hermes/BOOT.md
+      chmod 0640 /var/lib/hermes/.hermes/BOOT.md
+      chown hermes:hermes /var/lib/hermes/.hermes/BOOT.md
+    '';
+    deps = [ "hermes-agent-setup" ];
   };
 }

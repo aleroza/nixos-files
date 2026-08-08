@@ -29,7 +29,7 @@
   # ▸ Импорт auto-detected hardware config
   imports = [
     ./hardware-configuration.nix
-    ./hermes.nix
+    ./hermes
   ];
 
   # ▸ auto — конфигурация этого хоста
@@ -76,6 +76,13 @@
     desktop = true;
     laptop = true;
 
+    # OpenViking self-hosted context database. Bound to 127.0.0.1
+    # only (container network=host + OPENVIKING_SERVER_HOST=127.0.0.1).
+    # Outbound traffic to Google's embedding + VLM endpoints goes
+    # through the host proxy (default). hermes-agent reads
+    # /opt/openviking/keys/user_key via EnvironmentFile.
+    openviking.enable = true;
+
     # xserver.enable = true; @ Wayland in gnome
     gnome = {
       enable = true;
@@ -90,7 +97,10 @@
 
     docker = {
       enable = true;
-      users = [ "openclaw" ];
+      users = [
+        "openclaw"
+        "hermes"
+      ];
       login = [
         {
           user = "aleroza";
@@ -113,6 +123,10 @@
     ];
   };
 
+  # OpenViking reads the Google API key itself at activation
+  # time from the sops secret at /run/secrets/hermes/GOOGLE_API_KEY.
+  # The path is configured via services.openviking.embedding.apiKeyFile.
+
   # ▸ Display manager override (DE модули ставят user = "", перебиваем тут)
   services.displayManager.autoLogin.user = lib.mkForce "aleroza";
 
@@ -134,6 +148,11 @@
   #   переопределяют только то, что отличается.
   #
   #   Hermes env file lives in hermes.nix (separate ownership).
+  #   OpenViking reuses the GOOGLE_API_KEY line from a dedicated
+  #   secret at /run/secrets/hermes/GOOGLE_API_KEY, which sops reads
+  #   from aleroza.yaml:\$hermes.GOOGLE_API_KEY. We declare it here
+  #   (not hermes.nix) because the file lives in the aleroza namespace
+  #   of the secrets tree, not the hermes namespace.
   sops.secrets =
     let
       alerozaSecret =
@@ -149,6 +168,7 @@
     {
       "aleroza/password" = alerozaSecret { };
       "aleroza/dockerhub/password" = alerozaSecret { };
+      "hermes/GOOGLE_API_KEY" = alerozaSecret { };
     };
 
   # ▸ Подсказываем интерактивному `sops`, какие правила шифрования применять.
@@ -179,7 +199,7 @@
     description = "OpenClaw service account";
   };
 
-  # Hermes user/services/units live in hermes.nix (imported above).
+  # Hermes user/services/units live in hermes/ (imported above).
 
   # ▸ Shell-алиасы
   environment.shellAliases = {
@@ -279,5 +299,5 @@
   };
 
   # Hermes-triggered system activation (nixos-activate.service +
-  # nixos-activate-trigger.path) lives in hermes.nix.
+  # nixos-activate-trigger.path) lives in hermes/ (imported above).
 }

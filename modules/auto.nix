@@ -189,6 +189,40 @@ in
       };
     };
 
+    # ▸ OpenViking (local-first context database for Hermes Agent)
+    openviking = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Enable OpenViking self-hosted context database on
+          127.0.0.1:1933. Used by services.hermes-agent when
+          memory.provider is set to "openviking".
+        '';
+      };
+      proxyUrl = mkOption {
+        type = types.nullOr types.str;
+        default = "http://127.0.0.1:7890";
+        example = "http://127.0.0.1:7890";
+        description = ''
+          HTTP proxy for OpenViking's outbound traffic to Google
+          (embedding + VLM). Default keeps the host's local
+          proxy; set null to disable.
+        '';
+      };
+    };
+
+    # ▸ Hermes host privileges
+    # Gate for the temporary allowlist that gives hermes sudo
+    # rights to restart openviking-* units + daemon-reload, AND
+    # disables NoNewPrivileges on hermes-agent.service. See
+    # modules/services/hermes-host-privs.nix for the actual unit
+    # + sudoers config. Flip to false when NosResearch/hermes-
+    # agent#5528 (path-anchored dangerous patterns) ships, or
+    # we roll our own approval flow. The option itself is
+    # declared in the module (not here) so this stays just a
+    # description comment.
+
     # ▸ Bluetooth
     bluetooth = mkOption {
       type = types.bool;
