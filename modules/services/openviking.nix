@@ -97,9 +97,9 @@ let
           model: $vlm_model
         }
       }')
-    printf '%s' "$JSON" > /opt/openviking/data/ov.conf
-    chmod 0640 /opt/openviking/data/ov.conf
-    chown openviking:openviking /opt/openviking/data/ov.conf
+    printf '%s' "$JSON" > ${cfg.confDir}/ov.conf
+    chmod 0640 ${cfg.confDir}/ov.conf
+    chown openviking:openviking ${cfg.confDir}/ov.conf
   '';
 
   # Host-side ExecStartPost. Rendered into /opt/openviking/execStartPost.sh
@@ -122,7 +122,7 @@ let
       sleep 1
     done
 
-    ROOT_KEY=$(${pkgs.jq}/bin/jq -r '.server.root_api_key' /opt/openviking/data/ov.conf)
+    ROOT_KEY=$(${pkgs.jq}/bin/jq -r '.server.root_api_key' ${cfg.confDir}/ov.conf)
 
     # 1. Ensure account exists. 409 ALREADY_EXISTS is fine.
     code=$(${pkgs.curl}/bin/curl -s -o /dev/null -w '%{http_code}' -X POST \
@@ -169,10 +169,26 @@ in
       description = "Port for openviking-server to listen on.";
     };
 
+    confDir = lib.mkOption {
+      type = lib.types.path;
+      default = "/opt/openviking/conf";
+      description = ''
+        Directory for the read-only server config (ov.conf). Bind-mounted
+        into the container at /app/.openviking, which is the default
+        OPENVIKING_CONFIG_FILE path inside the upstream image.
+      '';
+    };
+
     dataDir = lib.mkOption {
       type = lib.types.path;
       default = "/opt/openviking/data";
-      description = "Server data dir (bind-mounted into the container at /data).";
+      description = ''
+        Server runtime data directory. Bind-mounted into the container at
+        /app/data, which is where openviking v0.4.12 actually writes its
+        accounts, users, vectordb, and viking/ state. Despite upstream
+        docs saying everything lives under /app/.openviking, the
+        server has its own /app/data default workspace.
+      '';
     };
 
     keysDir = lib.mkOption {
@@ -244,6 +260,7 @@ in
     # resolve to fresh Nix-rendered content.
     systemd.tmpfiles.rules = [
       "d /opt/openviking 0750 openviking openviking - -"
+      "d /opt/openviking/conf 0750 openviking openviking - -"
       "d /opt/openviking/data 0750 openviking openviking - -"
       "d /opt/openviking/keys 0750 openviking openviking - -"
       "f+ /opt/openviking/preStart.sh 0750 root root - ${preStartScript}"
@@ -259,7 +276,8 @@ in
       image = cfg.image;
       extraOptions = [ "--network=host" ];
       volumes = [
-        "${cfg.dataDir}:/app/.openviking"
+        "${cfg.confDir}:/app/.openviking"
+        "${cfg.dataDir}:/app/data"
       ];
       environment = {
         OPENVIKING_SERVER_HOST = "127.0.0.1";
