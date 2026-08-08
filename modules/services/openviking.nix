@@ -106,7 +106,7 @@ let
   # via tmpfiles. Mints a user_key via the Admin API after the
   # container is healthy (Type=notify waits for READY=1).
   execStartPostScript = pkgs.writeShellScript "openviking-execStartPost" ''
-    set -euo pipefail
+    set -euxo pipefail
 
     ENDPOINT=http://127.0.0.1:${toString cfg.port}
     KEY_FILE=${cfg.keysDir}/user_key
