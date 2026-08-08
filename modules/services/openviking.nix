@@ -134,7 +134,7 @@ let
 
     # 1. Ensure account exists. 409 ALREADY_EXISTS is fine.
     code=$(${pkgs.curl}/bin/curl -s -o /dev/null -w '%{http_code}' -X POST \
-      -H "Authorization: Bearer ***" \
+      -H "Authorization: Bearer $ROOT_KEY" \
       -H "Content-Type: application/json" \
       -d '{"account_id":"default","admin_user_id":"default"}' \
       "$ENDPOINT/api/v1/admin/accounts")
