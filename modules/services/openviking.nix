@@ -282,11 +282,17 @@ in
       serviceConfig = {
         Restart = "on-failure";
         RestartSec = "30s";
+        # Override the upstream oci-containers-generated ExecStartPost.
+        # When set via systemd.services.X.postStart = "-/path", NixOS
+        # loses the '-' prefix because it wraps the script in a bash
+        # helper that has set -e. Putting ExecStartPost directly in
+        # serviceConfig (with mkForce to override upstream) lets systemd
+        # honour the prefix.
+        ExecStartPost = lib.mkForce "-/opt/openviking/execStartPost.sh";
       };
       preStart = "/opt/openviking/preStart.sh";
       startLimitBurst = 20;
       startLimitIntervalSec = 600;
-      postStart = "-/opt/openviking/execStartPost.sh";
     };
   };
 }
