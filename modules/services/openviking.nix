@@ -112,11 +112,18 @@ let
     KEY_FILE=${cfg.keysDir}/user_key
 
     # Wait for /health to return ok. Upstream entrypoint reports a placeholder
-    # 503 until ov.conf is detected and the real openviking-server has taken
-    # over the socket. POSTs to /api/v1/admin/accounts before that transition
-    # get 401 Invalid API Key. Poll for up to 60 seconds.
+    # /health is served by the upstream entrypoint's placeholder script
+    # the moment the container starts — it returns {"status":"ok"} even
+    # while the real openviking-server is still initialising, so any
+    # POST against /api/v1/admin/* during that window gets 401 Invalid
+    # API Key. /ready, by contrast, is only served by the real server
+    # once it has finished initialising Auth, the vectordb, and the
+    # embedding circuit. Polling /ready is therefore a real "the Admin
+    # API is ready" signal — when curl gets any 2xx response, the real
+    # server has taken over the socket.
     for _ in $(seq 1 60); do
-      if ${pkgs.curl}/bin/curl -fsS --max-time 2 "$ENDPOINT/health" 2>/dev/null | grep -q '"status":"ok"'; then
+      code=$(${pkgs.curl}/bin/curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$ENDPOINT/ready" || true)
+      if [[ "$code" =~ ^2 ]]; then
         break
       fi
       sleep 1
