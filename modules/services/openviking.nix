@@ -286,7 +286,7 @@ in
       preStart = "/opt/openviking/preStart.sh";
       startLimitBurst = 20;
       startLimitIntervalSec = 600;
-      postStart = "/opt/openviking/execStartPost.sh";
+      postStart = "-/opt/openviking/execStartPost.sh";
     };
   };
 }
