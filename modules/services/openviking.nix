@@ -124,6 +124,7 @@ let
     for _ in $(seq 1 60); do
       code=$(${pkgs.curl}/bin/curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$ENDPOINT/ready" || true)
       if [[ "$code" =~ ^2 ]]; then
+        sleep 5
         break
       fi
       sleep 1
