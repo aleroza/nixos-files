@@ -134,7 +134,7 @@ let
 
     # 1. Ensure account exists. 409 ALREADY_EXISTS is fine.
     code=$(${pkgs.curl}/bin/curl -s -o /dev/null -w '%{http_code}' -X POST \
-      -H "Authorization: Bearer ${"$"}{ROOT_KEY}" \
+      -H "Authorization: Bearer ***" \
       -H "Content-Type: application/json" \
       -d '{"account_id":"default","admin_user_id":"default"}' \
       "$ENDPOINT/api/v1/admin/accounts")
@@ -145,7 +145,7 @@ let
 
     # 2. Mint user_key.
     USER_KEY=$(${pkgs.curl}/bin/curl -fsS -X POST \
-      -H "Authorization: Bearer ${"$"}{ROOT_KEY}" \
+      -H "Authorization: Bearer ***" \
       -H "Content-Type: application/json" \
       -d '{"user_id":"default","role":"user"}' \
       "$ENDPOINT/api/v1/admin/accounts/default/users" \
