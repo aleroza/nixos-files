@@ -64,15 +64,11 @@
       all_proxy = "http://127.0.0.1:7890";
       NO_PROXY = "127.0.0.1,localhost,::1";
       no_proxy = "127.0.0.1,localhost,::1";
-      # OpenViking client connection. Endpoint is the container
-      # bound to 127.0.0.1:1933 (host network mode + server bind
-      # override). OPENVIKING_API_KEY is provided by the second
-      # EnvironmentFile above. ACCOUNT / USER / AGENT are local-mode
-      # identifiers the server uses to scope data.
-      OPENVIKING_ENDPOINT = "http://127.0.0.1:1933";
-      OPENVIKING_ACCOUNT = "default";
-      OPENVIKING_USER = "default";
-      OPENVIKING_AGENT = "hermes";
+      # OpenViking client connection commented out while integration is being reworked (Aug 2026).
+      # OPENVIKING_ENDPOINT = "http://127.0.0.1:1933";
+      # OPENVIKING_ACCOUNT = "default";
+      # OPENVIKING_USER = "default";
+      # OPENVIKING_AGENT = "hermes";
     };
     settings.model = "minimax/MiniMax-M3";
     # Sub-agents inherit delegation.model from settings; primary session
@@ -118,7 +114,7 @@
     # Telegram notification so the user knows the upstream is
     # broken. Restart hermes-agent once the server is healthy and
     # the plugin reconnects.
-    settings.memory.provider = "openviking";
+    # settings.memory.provider = "openviking"; # commented out while integration is being reworked (Aug 2026)
     settings.memory.userProfileEnabled = true;
 
     # Fix "ModuleNotFoundError: No module named 'hermes_state_common'"

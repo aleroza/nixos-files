@@ -202,7 +202,7 @@ in
       };
       model = lib.mkOption {
         type = lib.types.str;
-        default = "gemini-embedding-2-preview";
+        default = "gemini-embedding-001";
       };
       dimension = lib.mkOption {
         type = lib.types.int;

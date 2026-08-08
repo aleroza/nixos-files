@@ -81,7 +81,7 @@
     # Outbound traffic to Google's embedding + VLM endpoints goes
     # through the host proxy (default). hermes-agent reads
     # /opt/openviking/keys/user_key via EnvironmentFile.
-    openviking.enable = true;
+    # openviking.enable = true; # disabled while integration is being reworked (Aug 2026)
 
     # xserver.enable = true; @ Wayland in gnome
     gnome = {
