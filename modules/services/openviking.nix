@@ -145,7 +145,7 @@ let
 
     # 2. Mint user_key.
     USER_KEY=$(${pkgs.curl}/bin/curl -fsS -X POST \
-      -H "Authorization: Bearer ***" \
+      -H "Authorization: Bearer $ROOT_KEY" \
       -H "Content-Type: application/json" \
       -d '{"user_id":"default","role":"user"}' \
       "$ENDPOINT/api/v1/admin/accounts/default/users" \
