@@ -126,6 +126,7 @@ let
           agfs: { backend: "local" }
         },
         embedding: {
+          allow_metadata_override: true,
           dense: {
             provider: "${cfg.embedding.provider}",
             api_key: $embed_key,
