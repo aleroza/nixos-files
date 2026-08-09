@@ -122,6 +122,9 @@
     ];
   };
 
+  services.openviking.rootApiKey =
+    "ovk_" + lib.substring 0 32 (builtins.hashString "sha256" "aleroza-pc/openviking/root-api-key/v1");
+
   # OpenViking's VLM block still reads the Google API key from the
   # sops secret at /run/secrets/hermes/GOOGLE_API_KEY. The embedding
   # block now points at local Ollama and no longer needs an API key.
@@ -186,6 +189,7 @@
       "aleroza/password" = alerozaSecret { };
       "aleroza/dockerhub/password" = alerozaSecret { };
       "hermes/GOOGLE_API_KEY" = alerozaSecret { };
+      "hermes/MINIMAX_API_KEY" = alerozaSecret { };
     };
 
   # ▸ Подсказываем интерактивному `sops`, какие правила шифрования применять.
@@ -200,6 +204,7 @@
       "wheel"
       "docker"
       "plocate"
+      "hermes"
     ];
   };
 
