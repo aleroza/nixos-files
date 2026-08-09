@@ -186,16 +186,40 @@ let
       exit 1
     fi
 
-    # 2. Mint user_key.
-    USER_KEY=$(${pkgs.curl}/bin/curl -fsS -X POST \
+    # 2. Mint user_key. The server auto-creates the user on first
+    # boot and persists the key to
+    # <dataDir>/viking/default/_system/users.json (see pitfall
+    # 3c in nixos-self-edit). Try POST first (fresh installs);
+    # if it returns 409 because the user already exists, fall
+    # back to reading the auto-minted key from disk.
+    USER_KEY=$(${pkgs.curl}/bin/curl -s -o /dev/null -w '%{http_code}' -X POST \
       -H "Authorization: Bearer $ROOT_KEY" \
       -H "Content-Type: application/json" \
       -d '{"user_id":"default","role":"user"}' \
-      "$ENDPOINT/api/v1/admin/accounts/default/users" \
-      | ${pkgs.jq}/bin/jq -r '.result.user_key')
+      "$ENDPOINT/api/v1/admin/accounts/default/users" || true)
+    code="$USER_KEY"
+
+    if [[ "$code" == "200" ]]; then
+      # Fresh mint: GET the key from a follow-up call.
+      USER_KEY=$(${pkgs.curl}/bin/curl -fsS \
+        -H "Authorization: Bearer $ROOT_KEY" \
+        "$ENDPOINT/api/v1/admin/accounts/default/users/default" \
+        | ${pkgs.jq}/bin/jq -r '.result.user_key // .result.key // empty')
+    elif [[ "$code" == "409" ]]; then
+      # User already exists; read auto-minted key from disk.
+      USER_KEY=$(${pkgs.jq}/bin/jq -r '.users.default.key // empty' \
+        ${cfg.dataDir}/viking/default/_system/users.json 2>/dev/null || true)
+      if [[ -z "$USER_KEY" ]]; then
+        echo "openviking-execStartPost: 409 on user mint and users.json has no key" >&2
+        exit 1
+      fi
+    else
+      echo "openviking-execStartPost: user mint failed: $code" >&2
+      exit 1
+    fi
 
     if [[ -z "$USER_KEY" || "$USER_KEY" == "null" ]]; then
-      echo "openviking-execStartPost: empty user_key in response" >&2
+      echo "openviking-execStartPost: empty user_key after mint-or-read" >&2
       exit 1
     fi
 
