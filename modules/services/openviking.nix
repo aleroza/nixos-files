@@ -187,26 +187,33 @@ let
       exit 1
     fi
 
-    # 2. Mint user_key. The server auto-creates the user on first
-    # boot and persists the key to
+    # 2. Mint user_key. The server auto-creates the default user
+    # on first boot and persists the key to
     # <dataDir>/viking/default/_system/users.json (see pitfall
     # 3c in nixos-self-edit). Try POST first (fresh installs);
     # if it returns 409 because the user already exists, fall
-    # back to reading the auto-minted key from disk.
-    USER_KEY=$(${pkgs.curl}/bin/curl -s -o /dev/null -w '%{http_code}' -X POST \
+    # back to reading the auto-minted key from disk. We capture
+    # the POST body to a tempfile so we can both inspect the
+    # status code and extract user_key from the same response.
+    POST_BODY=$(mktemp)
+    code=$(${pkgs.curl}/bin/curl -sS -o "$POST_BODY" -w '%{http_code}' -X POST \
       -H "Authorization: Bearer $ROOT_KEY" \
       -H "Content-Type: application/json" \
       -d '{"user_id":"default","role":"user"}' \
       "$ENDPOINT/api/v1/admin/accounts/default/users" || true)
-    code="$USER_KEY"
 
     if [[ "$code" == "200" ]]; then
-      # Fresh mint: GET the key from a follow-up call.
-      USER_KEY=$(${pkgs.curl}/bin/curl -fsS \
-        -H "Authorization: Bearer $ROOT_KEY" \
-        "$ENDPOINT/api/v1/admin/accounts/default/users/default" \
-        | ${pkgs.jq}/bin/jq -r '.result.user_key // .result.key // empty')
+      # Fresh mint: the POST response body has user_key.
+      USER_KEY=$(${pkgs.jq}/bin/jq -r '.result.user_key // .user_key // empty' < "$POST_BODY")
+      rm -f "$POST_BODY"
+      if [[ -z "$USER_KEY" ]]; then
+        # Fallback to disk read in case OV writes the key to
+        # users.json before returning.
+        USER_KEY=$(${pkgs.jq}/bin/jq -r '.users.default.key // empty' \
+          ${cfg.dataDir}/viking/default/_system/users.json 2>/dev/null || true)
+      fi
     elif [[ "$code" == "409" ]]; then
+      rm -f "$POST_BODY"
       # User already exists; read auto-minted key from disk.
       USER_KEY=$(${pkgs.jq}/bin/jq -r '.users.default.key // empty' \
         ${cfg.dataDir}/viking/default/_system/users.json 2>/dev/null || true)
@@ -215,6 +222,7 @@ let
         exit 1
       fi
     else
+      rm -f "$POST_BODY"
       echo "openviking-execStartPost: user mint failed: $code" >&2
       exit 1
     fi
