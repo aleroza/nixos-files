@@ -125,9 +125,14 @@
   services.openviking.rootApiKey =
     "ovk_" + lib.substring 0 32 (builtins.hashString "sha256" "aleroza-pc/openviking/root-api-key/v1");
 
-  # OpenViking's VLM block still reads the Google API key from the
-  # sops secret at /run/secrets/hermes/GOOGLE_API_KEY. The embedding
-  # block now points at local Ollama and no longer needs an API key.
+  # OpenViking VLM now routes through MiniMax instead of Google.
+  # The embedding block still points at local Ollama and doesn't
+  # need an API key.
+  services.openviking.vlm = {
+    apiBase = "https://api.minimax.io/v1";
+    model = "MiniMax-M2.7";
+    apiKeyFile = "/run/secrets/hermes/MINIMAX_API_KEY";
+  };
 
   # ▸ Ollama — local embedding server for OpenViking.
   # Binds to 127.0.0.1 only (no openFirewall). CPU-only build
