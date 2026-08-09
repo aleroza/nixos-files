@@ -78,9 +78,8 @@
 
     # OpenViking self-hosted context database. Bound to 127.0.0.1
     # only (container network=host + OPENVIKING_SERVER_HOST=127.0.0.1).
-    # Outbound traffic to Google's embedding + VLM endpoints goes
-    # through the host proxy (default). hermes-agent reads
-    # /opt/openviking/keys/user_key via EnvironmentFile.
+    # Embedding goes through local Ollama (services.ollama below);
+    # VLM still routes through Google via the host proxy.
     openviking.enable = true;
 
     # xserver.enable = true; @ Wayland in gnome
@@ -123,9 +122,22 @@
     ];
   };
 
-  # OpenViking reads the Google API key itself at activation
-  # time from the sops secret at /run/secrets/hermes/GOOGLE_API_KEY.
-  # The path is configured via services.openviking.embedding.apiKeyFile.
+  # OpenViking's VLM block still reads the Google API key from the
+  # sops secret at /run/secrets/hermes/GOOGLE_API_KEY. The embedding
+  # block now points at local Ollama and no longer needs an API key.
+
+  # ▸ Ollama — local embedding server for OpenViking.
+  # Binds to 127.0.0.1 only (no openFirewall). CPU-only build
+  # because the host has no GPU; 7 GB RAM is enough for
+  # nomic-embed-text:v1.5 (84 MB Q4_K_M quant). ollama-model-
+  # loader.service pulls the model on first boot.
+  services.ollama = {
+    enable = true;
+    package = pkgs.ollama-cpu;
+    host = "127.0.0.1";
+    port = 11434;
+    loadModels = [ "nomic-embed-text:v1.5" ];
+  };
 
   # ▸ Display manager override (DE модули ставят user = "", перебиваем тут)
   services.displayManager.autoLogin.user = lib.mkForce "aleroza";
