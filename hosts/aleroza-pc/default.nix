@@ -129,14 +129,19 @@
   # ▸ Ollama — local embedding server for OpenViking.
   # Binds to 127.0.0.1 only (no openFirewall). CPU-only build
   # because the host has no GPU; 7 GB RAM is enough for
-  # nomic-embed-text:v1.5 (84 MB Q4_K_M quant). ollama-model-
-  # loader.service pulls the model on first boot.
+  # nomic-embed-text-v1.5 Q4_K_M quant (84 MB on disk, ~150 MB
+  # RSS, embedding_length=768). ollama-model-loader.service
+  # pulls the model on first boot. Pulling directly from
+  # HuggingFace via Ollama's hf.co/... tag because Ollama's
+  # registry only ships F16 (~262 MB, ~3x larger) for this model,
+  # and Q4_K_M retains ~95% retrieval quality at a fraction of
+  # the RAM cost.
   services.ollama = {
     enable = true;
     package = pkgs.ollama-cpu;
     host = "127.0.0.1";
     port = 11434;
-    loadModels = [ "nomic-embed-text:v1.5" ];
+    loadModels = [ "hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q4_K_M" ];
   };
 
   # ▸ Display manager override (DE модули ставят user = "", перебиваем тут)

@@ -285,8 +285,14 @@ in
       };
       model = lib.mkOption {
         type = lib.types.str;
-        default = "nomic-embed-text:v1.5";
-        description = "Embedding model identifier. Must match the dimension.";
+        # Default to the HF-tagged Q4_K_M GGUF. Ollama's own
+        # registry only ships F16 for this model (~262 MB), but
+        # the upstream nomic-ai GGUF repo exposes Q4_K_M (84 MB,
+        # ~95% retrieval quality, ~3x cheaper on CPU/RAM). The
+        # hf.co/... pull URL works with `ollama pull` directly
+        # without a custom Modelfile.
+        default = "hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q4_K_M";
+        description = "Embedding model identifier. Must match the dimension. Use the Ollama-resolvable name (works for both registry tags like 'nomic-embed-text:v1.5' and direct HuggingFace tags like 'hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q4_K_M').";
       };
       dimension = lib.mkOption {
         type = lib.types.int;
