@@ -10,10 +10,16 @@
 sudo nixos-rebuild switch --flake .#aleroza-pc
 ```
 
-Либо через алиас:
+Либо через алиас (включается флагом `auto.nixRebuildMeta.enable`):
 ```bash
 nix-rebuild
 ```
+
+Алиас оборачивает [`scripts/nixos-rebuild-meta`](scripts/nixos-rebuild-meta): прокидывает
+`NIXOS_GIT_REVISION/BRANCH/DIRTY/URL` в окружение, добавляет `--impure`
+и делегирует в `nixos-rebuild`. Без этого `nixos-version
+--configuration-revision` и `/etc/os-release` остаются с пустыми
+полями. Целевой хост берётся из `config.networking.hostName`.
 
 ## Хосты
 
@@ -80,6 +86,7 @@ modules/
 ├── security.nix          # fail2ban, ssh
 ├── flatpak.nix           # Flatpak / flathub
 └── dev/                  # dev tooling (nodejs, python)
+└── nix-rebuild-meta.nix  # alias `nix-rebuild` с NIXOS_GIT_* metadata
 
 users/
 ├── modules/

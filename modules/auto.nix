@@ -60,7 +60,10 @@ in
       trustedInterfaces = mkOption {
         type = types.listOf types.str;
         default = [ ];
-        example = [ "wlan0" "tailscale0" ];
+        example = [
+          "wlan0"
+          "tailscale0"
+        ];
         description = ''
           Interfaces treated as trusted LAN by the firewall. Required for
           LAN game discovery (mDNS, broadcast) to work — open ports alone
@@ -72,7 +75,10 @@ in
       allowedTCPPorts = mkOption {
         type = types.listOf types.port;
         default = [ ];
-        example = [ 6881 51413 ];
+        example = [
+          6881
+          51413
+        ];
         description = ''
           Extra TCP ports to open on the firewall, in addition to the
           feature-defined port sets (e.g. gaming). Merged into a single
@@ -289,6 +295,20 @@ in
       type = types.str;
       default = "";
       description = "Primary system user. Auto-filled into module user-lists like docker.users or display-brightness-ddcutil.users.";
+    };
+
+    # ▸ nix-rebuild shell alias wrapper
+    nixRebuildMeta = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Install a shell alias `nix-rebuild` that wraps the
+          nixos-rebuild-meta script (builds + switches with NIXOS_GIT_*
+          metadata baked into the closure). The alias targets the current
+          host via flake ref `#${"$"}{config.networking.hostName}`.
+        '';
+      };
     };
   };
 }
