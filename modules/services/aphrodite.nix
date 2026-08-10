@@ -93,7 +93,7 @@ let
     catalog_intent_hints = ${if cfg.prompts.catalogIntentHints then "true" else "false"}
   '';
 
-  # ExecStartPre writes the rendered config into
+  # ExecStartPre writes the rendered TOML config into
   # /run/aphrodite/aphrodite.toml — a tmpfs directory that
   # RuntimeDirectory=aphrodite creates at unit start. /etc is
   # read-only under NixOS, so this avoids the mkdir failure that
@@ -101,17 +101,30 @@ let
   # ephemeral runtime directory; it's regenerated on every start
   # from the closure-pinned derivation, so config drift between
   # the store and the live file is impossible.
+  #
+  # ExecStartPre also writes /run/aphrodite/aphrodite.env with
+  # APHRODITE_API_KEY sourced from $MINIMAX_API_KEY (which
+  # systemd already loaded from services.aphrodite.apiKeyFile).
+  # The upstream binary hard-codes its bearer env var name to
+  # APHRODITE_API_KEY regardless of what api_key_env says in the
+  # TOML config (verified empirically on Aphrodite/v1.3.8), so we
+  # have to materialise a second env-file with the renamed key.
   preStartScript = pkgs.writeShellScript "aphrodite-pre-start" ''
     set -euo pipefail
 
     CONF=/run/aphrodite/aphrodite.toml
-
-    # RuntimeDirectory=aphrodite has already created /run/aphrodite
-    # owned by User=aphrodite. Just drop the config in.
     cp ${aphroditeConfig} "$CONF"
     chmod 0644 "$CONF"
 
-    echo "aphrodite-pre-start: wrote $CONF"
+    ENVFILE=/run/aphrodite/aphrodite.env
+    {
+      printf 'APHRODITE_API_KEY=%s\n' "''${MINIMAX_API_KEY:-}"
+    } > "$ENVFILE"
+    chmod 0640 "$ENVFILE"
+    # Lock down — contains a secret. aphrodite user only.
+    chown aphrodite:aphrodite "$ENVFILE"
+
+    echo "aphrodite-pre-start: wrote $CONF and $ENVFILE"
     echo "aphrodite-pre-start: upstream api_url=$(grep '^api_url' $CONF)"
   '';
 in
@@ -419,10 +432,20 @@ in
           "APHRODITE_CONFIG_PATH=/run/aphrodite/aphrodite.toml"
         ];
 
-        # Read the bare API key as KEY=VALUE into the proxy's env.
-        # Aphrodite reads $apiKeyEnv (default APHRODITE_API_KEY)
-        # from the process env.
-        EnvironmentFile = cfg.apiKeyFile;
+        # Two EnvironmentFiles:
+        #   1. apiKeyFile — the sops-managed /run/secrets/hermes/
+        #      MINIMAX_API_KEY, which exports MINIMAX_API_KEY=<key>.
+        #   2. /run/aphrodite/aphrodite.env — written by ExecStartPre,
+        #      contains APHRODITE_API_KEY=... sourced from $MINIMAX_API_KEY.
+        #
+        # systemd reads both at unit start; the second one wins on
+        # duplicate keys. The upstream proxy binary hard-codes its
+        # bearer lookup to the literal name APHRODITE_API_KEY, so
+        # we need a second env-file with the renamed key.
+        EnvironmentFile = [
+          cfg.apiKeyFile
+          "/run/aphrodite/aphrodite.env"
+        ];
 
         # CCR SQLite store must survive restart. WorkingDirectory
         # tells the proxy where to write ccr.db (mode=token).
