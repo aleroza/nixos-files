@@ -78,6 +78,8 @@
       OPENVIKING_ENDPOINT = "http://127.0.0.1:1933";
       OPENVIKING_ACCOUNT = "default";
       OPENVIKING_USER = "default";
+
+      LD_LIBRARY_PATH = lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ];
     };
     settings.model = "minimax/MiniMax-M3";
     # Sub-agents inherit delegation.model from settings; primary session
