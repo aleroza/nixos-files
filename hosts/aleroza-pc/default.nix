@@ -199,7 +199,14 @@
       "aleroza/password" = alerozaSecret { };
       "aleroza/dockerhub/password" = alerozaSecret { };
       "hermes/GOOGLE_API_KEY" = alerozaSecret { };
-      "hermes/MINIMAX_API_KEY" = alerozaSecret { };
+      # Aphrodite CCR compression proxy. Reuses the same
+    # MINIMAX_API_KEY the openviking.vlm path uses, but with
+    # group=aphrodite so the aphrodite-proxy.service unit can
+    # read it (the proxy runs as the dedicated aphrodite user).
+    "hermes/MINIMAX_API_KEY" = alerozaSecret {
+      group = "aphrodite";
+      mode = "0440";
+    };
     };
 
   # ▸ Подсказываем интерактивному `sops`, какие правила шифрования применять.
