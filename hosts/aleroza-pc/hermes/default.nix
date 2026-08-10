@@ -73,11 +73,24 @@
       OPENVIKING_ACCOUNT = "default";
       OPENVIKING_USER = "default";
     };
-    settings.model = "minimax/MiniMax-M3";
-    # Sub-agents inherit delegation.model from settings; primary session
-    # keeps settings.model above. Hyp: upstream module accepts unknown
-    # sub-keys and merges them into the gateway user-level YAML.
-    settings.delegation.model = "minimax/MiniMax-M2.7";
+    # Default to routing through the local Aphrodite CCR proxy
+    # (127.0.0.1:9798, see services.aphrodite). The model name
+    # uses the "provider/model" form so the gateway resolves it
+    # against the providers.* map below. Switching the upstream
+    # model name in one place (services.aphrodite.defaultModel)
+    # propagates here.
+    settings.model = "aphrodite-token/minimax/MiniMax-M3";
+    settings.providers.aphrodite-token = {
+      provider = "openai";
+      base_url = "http://127.0.0.1:9798";
+      api_key_env = "MINIMAX_API_KEY";
+      max_tokens = 65536;
+    };
+    # Sub-agents inherit delegation.model from settings; primary
+    # session keeps settings.model above. Aphrodite proxies the
+    # M2.7 model through the same upstream (api_url+api_key), so
+    # it routes via the same provider.
+    settings.delegation.model = "aphrodite-token/minimax/MiniMax-M2.7";
     settings.toolsets = [ "all" ];
     settings.approvals.smartPolicy = ''
       ESCALATE any command whose argument list, after shell
