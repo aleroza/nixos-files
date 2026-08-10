@@ -1,55 +1,45 @@
-# Home-manager module for Aphrodite integration with Hermes Agent.
+# Home-manager module for the Aphrodite integration.
 #
-# What it does:
-#   1. Installs the PlayForm/Aphrodite-Hermes plugin at
-#      ~/.hermes/plugins/aphrodite (symlink into the Nix store).
-#      On first Hermes launch the plugin auto-loads its dylib +
-#      proxy binary from the binaries/ subdir we ship here.
-#   2. Drops the prebuilt aphrodite proxy binary and the Hermes
-#      dylib into ~/.hermes/plugins/aphrodite/binaries/, so the
-#      plugin can dlopen them on startup without needing to
-#      fetch from GitHub Releases.
-#   3. Ships a Hermes profile `aphrodite` that routes through
-#      127.0.0.1:9798 → MiniMax.
+# What lives here (per-user, not per-host):
+#   1. ~/.hermes/profiles/aphrodite/config.yaml — an explicit
+#      profile that routes through the Aphrodite proxy on
+#      127.0.0.1:9798. Launch with:
+#        hermes --profile aphrodite
+#      The default profile (in
+#      hosts/aleroza-pc/hermes/default.nix) already routes
+#      through the same proxy via settings.providers.aphrodite-token,
+#      so this profile is mainly a backup / explicit-override
+#      entry point.
+#   2. ~/.hermes/aphrodite/.keep — empty directory marker.
+#      The systemd proxy (services.aphrodite) uses /opt/aphrodite
+#      for its data dir (see modules/services/aphrodite.nix,
+#      HOME=/opt/aphrodite), so this is only used for user-side
+#      overrides.
 #
-# The systemd proxy unit lives in modules/services/aphrodite.nix
-# and starts on the host independently of home-manager. The
-# plugin here gives the gateway its tools and context engine;
-# the systemd unit supplies the proxy process itself.
+# What does NOT live here anymore (was here before, was wrong):
+#   * Plugin installation at ~/.hermes/plugins/aphrodite/ via
+#     home.file. That path bypassed the NixOS hermes-agent
+#     module's extraPlugins mechanism — the gateway did not
+#     auto-enable the plugin because NixOS-managed plugins live
+#     in ~/.hermes/plugins/nix-managed-<name>, and home-manager
+#     wrote a regular recursive copy (not a symlink, not
+#     prefixed with `nix-managed-`).
+#
+#     The plugin is now correctly registered via
+#     services.hermes-agent.extraPlugins in
+#     hosts/aleroza-pc/hermes/default.nix. The systemd proxy it
+#     talks to is services.aphrodite in modules/services/aphrodite.nix.
+#
+#     The prebuilt proxy binary and the Hermes dylib are also
+#     declared there (same fetchurl derivations, in
+#     modules/services/aphrodite.nix's package option and in
+#     the host's environmentFiles for the proxy). We do not
+#     duplicate them in home-manager.
 
-{ config, lib, auto, pkgs, ... }:
+{ config, lib, auto, ... }:
 
 let
   cfg = auto.aphrodite;
-
-  # Pin to PlayForm/Aphrodite-Hermes v2.0.7 (matches the release
-  # tag fetched below). Update both together — the plugin's
-  # plugin.yaml declares a min_hermes_version that the gateway
-  # checks at load time.
-  plugin = pkgs.fetchFromGitHub {
-    owner = "PlayForm";
-    repo = "Aphrodite-Hermes";
-    rev = "v2.0.7";
-    sha256 = "sha256-UTDRotOfw13Cvisg6Uerp5nh4fU19VXREU5H6fBANFQ=";
-  };
-
-  # The proxy binary used by services.aphrodite (systemd) is the
-  # same one the plugin's __init__.py dlopen-equivalent code
-  # looks for under binaries/. We fetch from the same upstream
-  # release (PlayForm/Aphrodite v1.3.8) with the same SHA256 the
-  # NixOS module uses, so there is exactly one binary on disk.
-  aphroditeBinary = pkgs.fetchurl {
-    url = "https://github.com/PlayForm/Aphrodite/releases/download/Aphrodite/v1.3.8/aphrodite-x86_64-unknown-linux-gnu";
-    sha256 = "b2f3d71536c7291263b542bed5ff90b6d9271b4b2552369df5c3707e992caa18";
-  };
-
-  # The Hermes plugin dylib (libaphrodite_hermes.so) — a different
-  # artifact from the proxy binary, published in the same release
-  # under a different asset name.
-  aphroditeHermesDylib = pkgs.fetchurl {
-    url = "https://github.com/PlayForm/Aphrodite/releases/download/Aphrodite/v1.3.8/libaphrodite_hermes-x86_64-unknown-linux-gnu.so";
-    sha256 = "286a9866de0abe95c358037db2a25f6d21a36d52e2d503252879a32fcf99c82b";
-  };
 in
 {
   config = lib.mkIf (cfg.enable or false) {
@@ -58,34 +48,9 @@ in
       APHRODITE_CONFIG_PATH = "$HOME/.hermes/aphrodite/aphrodite.toml";
     };
 
-    # The plugin checkout. home.file with source=pkgs.fetchFromGitHub
-    # creates a regular file copy under the path — not a symlink.
-    # That works because Hermes's plugin loader imports the
-    # __init__.py directly; it does not require a live symlink.
-    home.file.".hermes/plugins/aphrodite" = {
-      source = plugin;
-      recursive = true;
-      # Don't clobber user edits to plugin.yaml etc. on re-deploy.
-      force = false;
-    };
-
-    # The plugin's __init__.py looks for these two files at:
-    #   ~/.hermes/plugins/aphrodite/binaries/aphrodite
-    #   ~/.hermes/plugins/aphrodite/binaries/libaphrodite_hermes.so
-    # We drop them in directly via home.file (single-file copy).
-    # The .binaries/ path is created implicitly by the file sources.
-    home.file.".hermes/plugins/aphrodite/binaries/aphrodite" = {
-      source = aphroditeBinary;
-      executable = true;
-    };
-    home.file.".hermes/plugins/aphrodite/binaries/libaphrodite_hermes.so" = {
-      source = aphroditeHermesDylib;
-    };
-
-    # Directory for user overrides of the rendered TOML and the
-    # CCR store. The proxy unit uses /opt/aphrodite/ as its
-    # data dir (HOME=/opt/aphrodite), but the plugin can write
-    # ~/.hermes/aphrodite/ for user-side state.
+    # Empty directory marker. The systemd proxy lives under
+    # /opt/aphrodite (services.aphrodite.dataDir), so this is
+    # only a place for user-side overrides.
     home.file.".hermes/aphrodite/.keep" = {
       text = "";
     };
