@@ -92,6 +92,13 @@
     # it routes via the same provider.
     settings.delegation.model = "aphrodite-token/minimax/MiniMax-M2.7";
     settings.toolsets = [ "all" ];
+    # The PlayForm/Aphrodite-Hermes plugin ships 13 tools
+    # (aphrodite_compress, aphrodite_retrieve, aphrodite_stats,
+    # ...) + 5 hooks + a context engine. Enable it here so the
+    # gateway auto-registers aphrodite_* on the next restart.
+    # The plugin is installed by users/modules/aphrodite.nix via
+    # home-manager; we just flip the on-switch here.
+    settings.plugins.aphrodite.enable = true;
     settings.approvals.smartPolicy = ''
       ESCALATE any command whose argument list, after shell
       deobfuscation (quotes, escapes, $() substitution, backslash
