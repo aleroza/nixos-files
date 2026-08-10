@@ -17,37 +17,37 @@
 #
 # What this module does:
 #   1. Fetches the PlayForm/Aphrodite-Hermes plugin source tree
-#      (Python wrapper + plugin.yaml + __init__.py) as a Nix store
-#      derivation. Pin: v2.0.7 (sha256 verified against upstream).
+#      (Python wrapper + plugin.yaml + __init__.py + download.sh)
+#      as a Nix store derivation. Pin: v2.0.7.
 #   2. Fetches the two prebuilt release binaries from the Aphrodite
 #      monorepo (companion release Aphrodite/v1.3.8):
 #        - aphrodite-x86_64-unknown-linux-gnu          (proxy binary)
 #        - libaphrodite_hermes-x86_64-unknown-linux-gnu.so (cdylib)
 #      Both sha256 verified against
 #      https://github.com/PlayForm/Aphrodite/releases/download/Aphrodite%2Fv1.3.8/SHA256SUMS-x86_64-unknown-linux-gnu.txt
-#   3. Activation script symlinks the store path into
-#        /var/lib/hermes/Aphrodite-Hermes        (plugin source)
-#        /var/lib/hermes/.hermes/plugins/aphrodite/binaries/aphrodite
-#        /var/lib/hermes/.hermes/plugins/aphrodite/binaries/libaphrodite_hermes.so
-#      …so the Python loader in the gateway can find everything by
-#      the conventional names. Ownership: hermes:hermes, mode 0750
-#      on directories, 0755 on binaries (the .so is dlopen'd as
-#      code, not just read).
+#   3. Activation script lays down the plugin files (symlinks to
+#      store paths) and the binaries (symlinks to store paths) under
+#      ~/.hermes/plugins/aphrodite/ as a real directory owned by
+#      hermes:hermes, mode 0750 (dirs) / 0755 (binaries).
+#
+#      The directory is real, NOT a symlink to a store path. The
+#      plugin's __init__.py resolves _PLUGIN_DIR via
+#      Path(__file__).resolve().parent and then looks for
+#      binaries/ as a subdirectory of that. If _PLUGIN_DIR itself
+#      is a symlink to a read-only store path, the dlopen() of
+#      binaries/libaphrodite_hermes.so fails with ENOENT — the
+#      store has no binaries/ subdirectory. So the real directory
+#      is mandatory, and only the files inside it are symlinks.
+#
+#      /var/lib/hermes/Aphrodite-Hermes is a clone-mirror symlink
+#      to the store source (humans + download.sh's monorepo probe
+#      use this path).
 #
 # What this module does NOT do:
 #   - Start the proxy. The plugin's __init__.py spawns the binary
-#     on first tool call (see aphrodite-launch in
-#     PlayForm/Aphrodite-Hermes/__init__.py). We rely on that.
-#   - Touch ~/.hermes/config.yaml. Plugin activation is driven by
-#     the existing services.hermes-agent.extraPlugins wiring in
-#     hosts/aleroza-pc/hermes/default.nix, which symlinks the
-#     plugin source into ~/.hermes/plugins/nix-managed-aphrodite.
-#     We additionally drop a *bare* name symlink
-#     ~/.hermes/plugins/aphrodite -> the same store path so
-#     interactive `bash download.sh` (from the plugin's own dir)
-#     works without changing directory, and so the plugin's
-#     BINARY_VERSION path resolution finds the binaries even if
-#     the gateway loader's path differs.
+#     on first tool call. We rely on that.
+#   - Touch ~/.hermes/config.yaml. Plugin discovery is automatic
+#     from ~/.hermes/plugins/* — no settings.plugins.* wiring needed.
 
 {
   config,
@@ -58,7 +58,6 @@
 
 let
   # Plugin source — PlayForm/Aphrodite-Hermes, pinned to v2.0.7.
-  # sha256 from `nix-prefetch-github --rev v2.0.7 PlayForm Aphrodite-Hermes`.
   pluginSrc = pkgs.fetchFromGitHub {
     owner = "PlayForm";
     repo = "Aphrodite-Hermes";
@@ -83,42 +82,44 @@ let
     sha256 = "286a9866de0abe95c358037db2a25f6d21a36d52e2d503252879a32fcf99c82b";
   };
 
-  # Hermes user owns the plugin tree. The activation script runs as
-  # root and chowns to hermes:hermes so the gateway (running as
-  # User=hermes) can dlopen the .so and execute the proxy binary
-  # without permission errors.
+  # Files from the plugin source we want to symlink into
+  # ~/.hermes/plugins/aphrodite/. We don't want everything in the
+  # store path (.git/ is ~5MB of git metadata) — just what the
+  # plugin needs to load + a couple of supporting files.
+  pluginFiles = [
+    "plugin.yaml"
+    "__init__.py"
+    "BINARY_VERSION"
+    "download.sh"
+    "download.ps1"
+    "README.md"
+  ];
+
   hermesHome = "/var/lib/hermes";
 in
 {
-  # No options declared — this is a leaf module that activates
-  # unconditionally when imported. Kept that way because the plugin
-  # is part of the hermes-agent stack on this host; if a future
-  # host doesn't want it, don't import this file.
-
   config = {
 
     # ▸ Activation: lay down plugin tree + binaries at known paths.
     #
-    #    /var/lib/hermes/Aphrodite-Hermes        -> ${pluginSrc}
-    #      (clone-mirror path — git-style; used by humans + the
-    #       plugin's own download.sh for re-resolving binaries)
+    #    /var/lib/hermes/Aphrodite-Hermes                       -> ${pluginSrc}
+    #    /var/lib/hermes/.hermes/plugins/aphrodite/             (real dir, 0750 hermes:hermes)
+    #      ├── plugin.yaml, __init__.py, BINARY_VERSION, ...    -> ${pluginSrc}/<file>
+    #      └── binaries/                                         (real subdir, 0750 hermes:hermes)
+    #          ├── aphrodite                                    -> ${proxyBin}
+    #          └── libaphrodite_hermes.so                       -> ${proxyDylib}
     #
-    #    /var/lib/hermes/.hermes/plugins/aphrodite -> ${pluginSrc}
-    #      (loader path; bare name "aphrodite" so `bash download.sh`
-    #       in $SCRIPT_DIR/.. finds binaries/ next to itself)
+    #    ~/.hermes/plugins/aphrodite/ MUST be a real directory,
+    #    not a symlink. The plugin's __init__.py uses
+    #    Path(__file__).resolve().parent as _PLUGIN_DIR and then
+    #    opens binaries/libaphrodite_hermes.so relative to it.
+    #    If _PLUGIN_DIR is a symlink to a read-only store path,
+    #    the dlopen() fails with ENOENT (the store has no
+    #    binaries/ subdirectory).
     #
-    #    /var/lib/hermes/.hermes/plugins/aphrodite/binaries/aphrodite
-    #      -> ${proxyBin}
-    #    /var/lib/hermes/.hermes/plugins/aphrodite/binaries/libaphrodite_hermes.so
-    #      -> ${proxyDylib}
-    #
-    #    All four owned by hermes:hermes, mode 0750 (dirs) / 0755
-    #    (binaries + dylib). The .so is dlopen'd as code; the proxy
-    #    binary is exec'd; both need the execute bit.
-    #
-    # Idempotent: each step checks for the target symlink's
-    # existence and skips if it already points at the right store
-    # path. Cheap to re-run on every activation.
+    # Idempotent: each step checks the target's current state and
+    # only writes when it differs. Safe to re-run on every
+    # activation; cheap.
     #
     # Also tolerates /var/lib/hermes being absent: services.hermes-
     # agent's own activation creates the user + home before this
@@ -136,42 +137,73 @@ in
         PLUGIN_DIR=${hermesHome}/.hermes/plugins/aphrodite
         BIN_DIR="$PLUGIN_DIR/binaries"
 
-        # Top-level clone mirror. Used by humans and by the plugin's
-        # own download.sh (which auto-detects Cargo.toml versions
-        # from the surrounding monorepo if present). Symlink, not
-        # copy — keeps the closure lean and avoids drift.
-        if [[ ! -L "$CLONE_PATH" ]] || [[ "$(readlink -f "$CLONE_PATH")" != "$PLUGIN_SRC" ]]; then
+        # ────────────────────────────────────────────────────────
+        # Clone mirror. Symlink (not copy). Used by humans + the
+        # plugin's download.sh which auto-probes Cargo.toml
+        # versions from the surrounding monorepo if present.
+        #
+        # If CLONE_PATH is a real directory from a previous
+        # dev-mode checkout, back it up so we don't silently
+        # nuke human edits. (Recurring switch from dev → Nix
+        # flow tends to leave old checkouts.)
+        # ────────────────────────────────────────────────────────
+        if [[ -L "$CLONE_PATH" ]]; then
+          if [[ "$(readlink -f "$CLONE_PATH")" != "$PLUGIN_SRC" ]]; then
+            ln -sfn "$PLUGIN_SRC" "$CLONE_PATH"
+          fi
+        elif [[ -e "$CLONE_PATH" ]]; then
+          mv "$CLONE_PATH" "''${CLONE_PATH}.bak.$(date +%s)"
+          ln -sfn "$PLUGIN_SRC" "$CLONE_PATH"
+        else
           mkdir -p "$(dirname "$CLONE_PATH")"
           ln -sfn "$PLUGIN_SRC" "$CLONE_PATH"
         fi
         chown -h hermes:hermes "$CLONE_PATH"
         chmod 0755 "$CLONE_PATH"
 
-        # Plugin directory the gateway's loader looks at. Bare name
-        # "aphrodite" so `bash $PLUGIN_DIR/download.sh` (run from
-        # the plugin's own dir) drops binaries into $PLUGIN_DIR/
-        # binaries/ correctly. The NixOS hermes-agent module also
-        # symlinks this same source into ~/.hermes/plugins/nix-
-        # managed-aphrodite — both paths point at the same store
-        # path, so no duplication.
-        mkdir -p "$BIN_DIR"
-        # Symlink the plugin directory itself to the source tree so
-        # plugin.yaml / __init__.py / download.sh live next to
-        # binaries/. The store source already has plugin.yaml +
-        # __init__.py at its root; we only need to add binaries/.
-        if [[ ! -L "$PLUGIN_DIR" ]] || [[ "$(readlink -f "$PLUGIN_DIR")" != "$PLUGIN_SRC" ]]; then
-          # If $PLUGIN_DIR is a real dir from a previous install
-          # (e.g. dev-mode plugin checkout), back it up so we don't
-          # silently nuke human edits. Idempotent: only swaps on a
-          # mismatch between current symlink target and $PLUGIN_SRC.
-          if [[ -e "$PLUGIN_DIR" ]] && [[ ! -L "$PLUGIN_DIR" ]]; then
-            mv "$PLUGIN_DIR" "''${PLUGIN_DIR}.bak.$(date +%s)"
-          fi
-          ln -sfn "$PLUGIN_SRC" "$PLUGIN_DIR"
+        # ────────────────────────────────────────────────────────
+        # Plugin directory. MUST be a real directory (the plugin
+        # resolves _PLUGIN_DIR = Path(__file__).resolve().parent
+        # and then opens binaries/ relative to it — a symlink to
+        # the read-only store path makes that impossible).
+        #
+        # If PLUGIN_DIR is a symlink to a store path from a
+        # previous version of this module, remove it and replace
+        # with a real directory.
+        # ────────────────────────────────────────────────────────
+        if [[ -L "$PLUGIN_DIR" ]]; then
+          rm -f "$PLUGIN_DIR"
         fi
+        if [[ ! -d "$PLUGIN_DIR" ]]; then
+          mkdir -p "$PLUGIN_DIR"
+        fi
+        chown hermes:hermes "$PLUGIN_DIR"
+        chmod 0750 "$PLUGIN_DIR"
 
-        # Binaries. Symlinks (not copies) so updates from the Nix
-        # store propagate on next activation without per-file sync.
+        # ────────────────────────────────────────────────────────
+        # Plugin files. Symlinks to the store source. The list is
+        # explicit (not a glob) so we don't pull .git/ (~5MB) or
+        # stale __pycache__/ (.pyc blobs) into the loader path.
+        # ────────────────────────────────────────────────────────
+        ${lib.concatMapStrings (f: ''
+          if [[ ! -L "$PLUGIN_DIR/${f}" ]] || [[ "$(readlink -f "$PLUGIN_DIR/${f}")" != "$PLUGIN_SRC/${f}" ]]; then
+            ln -sfn "$PLUGIN_SRC/${f}" "$PLUGIN_DIR/${f}"
+          fi
+          chown -h hermes:hermes "$PLUGIN_DIR/${f}"
+          chmod 0644 "$PLUGIN_DIR/${f}"
+        '') pluginFiles}
+
+        # ────────────────────────────────────────────────────────
+        # Binaries subdirectory + two binary symlinks. Mode 0755
+        # on the binaries themselves (the .so is dlopen'd as
+        # code, the proxy is exec'd).
+        # ────────────────────────────────────────────────────────
+        if [[ ! -d "$BIN_DIR" ]]; then
+          mkdir -p "$BIN_DIR"
+        fi
+        chown hermes:hermes "$BIN_DIR"
+        chmod 0750 "$BIN_DIR"
+
         for pair in \
           "aphrodite::$PROXY_BIN" \
           "libaphrodite_hermes.so::$PROXY_DYLIB" \
@@ -186,14 +218,8 @@ in
           chmod 0755 "$dest"
         done
 
-        # Belt-and-suspenders ownership on the whole plugin tree.
-        # Covers the case where a previous install left real
-        # directories behind (the .bak.<ts> above gets chown'd too
-        # so the user can inspect it without sudo).
-        chown -R hermes:hermes "$PLUGIN_DIR" || true
-        chmod -R u+rwX,g+rX,o-rwx "$PLUGIN_DIR" || true
-
-        echo "aphrodite-plugin: $PLUGIN_DIR -> $PLUGIN_SRC"
+        echo "aphrodite-plugin: $PLUGIN_DIR/ (real, hermes:hermes 0750)"
+        echo "aphrodite-plugin:   -> $PLUGIN_SRC (plugin files)"
         echo "aphrodite-plugin: $BIN_DIR/aphrodite -> $PROXY_BIN"
         echo "aphrodite-plugin: $BIN_DIR/libaphrodite_hermes.so -> $PROXY_DYLIB"
       '';
