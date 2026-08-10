@@ -101,14 +101,6 @@ let
   # ephemeral runtime directory; it's regenerated on every start
   # from the closure-pinned derivation, so config drift between
   # the store and the live file is impossible.
-  #
-  # ExecStartPre also writes /run/aphrodite/aphrodite.env with
-  # APHRODITE_API_KEY sourced from $MINIMAX_API_KEY (which
-  # systemd already loaded from services.aphrodite.apiKeyFile).
-  # The upstream binary hard-codes its bearer env var name to
-  # APHRODITE_API_KEY regardless of what api_key_env says in the
-  # TOML config (verified empirically on Aphrodite/v1.3.8), so we
-  # have to materialise a second env-file with the renamed key.
   preStartScript = pkgs.writeShellScript "aphrodite-pre-start" ''
     set -euo pipefail
 
@@ -116,18 +108,27 @@ let
     cp ${aphroditeConfig} "$CONF"
     chmod 0644 "$CONF"
 
-    ENVFILE=/run/aphrodite/aphrodite.env
-    {
-      printf 'APHRODITE_API_KEY=%s\n' "''${MINIMAX_API_KEY:-}"
-    } > "$ENVFILE"
-    chmod 0640 "$ENVFILE"
-    # Lock down — contains a secret. aphrodite user only.
-    chown aphrodite:aphrodite "$ENVFILE"
-
-    echo "aphrodite-pre-start: wrote $CONF and $ENVFILE"
+    echo "aphrodite-pre-start: wrote $CONF"
     echo "aphrodite-pre-start: upstream api_url=$(grep '^api_url' $CONF)"
   '';
-in
+# Wrapper around the aphrodite binary that materialises
+    # APHRODITE_API_KEY from $MINIMAX_API_KEY before exec'ing the
+    # proxy. The upstream binary (v1.3.8) hard-codes its bearer
+    # lookup to the literal name APHRODITE_API_KEY and ignores the
+    # api_key_env field in the TOML config — verified by direct
+    # binary test against the release. systemd loads
+    # MINIMAX_API_KEY from /run/secrets/hermes/MINIMAX_API_KEY
+    # (the sops secret declared in hosts/aleroza-pc/default.nix)
+    # via EnvironmentFile, and this wrapper passes the value
+    # through under the name aphrodite expects.
+    aphroditeRun = pkgs.writeShellScript "aphrodite-run" ''
+      set -euo pipefail
+      : "''${MINIMAX_API_KEY:?MINIMAX_API_KEY must be set in EnvironmentFile}"
+      exec env APHRODITE_API_KEY="$MINIMAX_API_KEY" \
+        ${cfg.package}/bin/aphrodite run
+    '';
+
+  in
 {
   options.services.aphrodite = {
     enable = lib.mkEnableOption "Aphrodite CCR compression proxy for Hermes Agent";
@@ -406,7 +407,7 @@ in
         Type = "simple";
         User = "aphrodite";
         Group = "aphrodite";
-        ExecStart = "${cfg.package}/bin/aphrodite run";
+        ExecStart = "${aphroditeRun}";
         Restart = "on-failure";
         RestartSec = "10s";
 
@@ -416,8 +417,8 @@ in
         # below points at this writable path.
         RuntimeDirectory = "aphrodite";
 
-        # PreStart renders /run/aphrodite/aphrodite.toml before
-        # the unit's main process starts. NixOS's bash wrapper
+        # ExecStartPre writes the rendered TOML config into
+        # /run/aphrodite/aphrodite.toml. NixOS's bash wrapper
         # around ExecStartPre sets -euo pipefail; a non-zero exit
         # blocks start (which is what we want here — without
         # a config file the proxy won't bind).
@@ -432,20 +433,11 @@ in
           "APHRODITE_CONFIG_PATH=/run/aphrodite/aphrodite.toml"
         ];
 
-        # Two EnvironmentFiles:
-        #   1. apiKeyFile — the sops-managed /run/secrets/hermes/
-        #      MINIMAX_API_KEY, which exports MINIMAX_API_KEY=<key>.
-        #   2. /run/aphrodite/aphrodite.env — written by ExecStartPre,
-        #      contains APHRODITE_API_KEY=... sourced from $MINIMAX_API_KEY.
-        #
-        # systemd reads both at unit start; the second one wins on
-        # duplicate keys. The upstream proxy binary hard-codes its
-        # bearer lookup to the literal name APHRODITE_API_KEY, so
-        # we need a second env-file with the renamed key.
-        EnvironmentFile = [
-          cfg.apiKeyFile
-          "/run/aphrodite/aphrodite.env"
-        ];
+        # EnvironmentFile loads MINIMAX_API_KEY from the sops-managed
+        # /run/secrets/hermes/MINIMAX_API_KEY. The wrapper at ExecStart
+        # then materialises APHRODITE_API_KEY (the literal name the
+        # upstream binary requires) and exec's the proxy.
+        EnvironmentFile = cfg.apiKeyFile;
 
         # CCR SQLite store must survive restart. WorkingDirectory
         # tells the proxy where to write ccr.db (mode=token).
