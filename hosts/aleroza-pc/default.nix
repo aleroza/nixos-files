@@ -170,7 +170,6 @@
   # ▸ Группы
   users.groups = {
     openclaw = { };
-    aphrodite = { };
     plocate = { };
   };
 
@@ -216,24 +215,13 @@
         group = "root";
         mode = "0400";
       };
-      # Aphrodite uses its own key. The preStart script in
-      # modules/services/aphrodite.nix reads it as root (NixOS's
-      # bash wrapper around ExecStartPre) before dropping to
-      # User=aphrodite. mode 0400 + owner=root keeps the secret
-      # readable by preStart only; the aphrodite user itself never
-      # touches this file — it reads the rendered TOML instead.
-      # Aphrodite uses its own key. The preStart script in
-      # modules/services/aphrodite.nix reads it as User=aphrodite
-      # (NixOS drops ExecStartPre to the unit's User), so the file
-      # must be readable by the aphrodite group. mode 0440 +
-      # owner=root is sufficient; preStart runs at unit start with
-      # the rendered TOML ending up owned by aphrodite anyway.
-      "aphrodite/MINIMAX_API_KEY" = {
-        sopsFile = ./secrets/users/aleroza.yaml;
-        owner = "root";
-        group = "aphrodite";
-        mode = "0440";
-      };
+      # Aphrodite reuses the generic hermes key. The proxy binary
+      # is spawned by the PlayForm/Aphrodite-Hermes plugin's
+      # __init__.py as the gateway's User=hermes, and reads the
+      # API key from the same MINIMAX_API_KEY environment variable
+      # the gateway already exposes (sourced from
+      # /run/secrets/hermes/env at gateway start). No separate
+      # aphrodite/* sops secret needed.
     };
 
   # ▸ Подсказываем интерактивному `sops`, какие правила шифрования применять.

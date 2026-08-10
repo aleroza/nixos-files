@@ -6,6 +6,13 @@
 # drop in. See hosts/aleroza-pc/README.md for the full rationale.
 #
 # Sections:
+#   0. ./aphrodite.nix import — declares the PlayForm/Aphrodite-Hermes
+#      plugin + companion binaries (proxy + cdylib) as Nix store
+#      derivations; activation script symlinks them into
+#      ~/.hermes/plugins/aphrodite/ with hermes:hermes ownership.
+#      Plugin source lives in the store, not in /var/lib/hermes —
+#      only symlinks (clone mirror + plugin dir + binaries/) live
+#      on disk so upgrades from the store propagate on activation.
 #   1. Hermes system user (extraGroups).
 #   2. Hermes sops secret — environment variables the gateway needs
 #      (API keys, etc.). Owned by hermes:hermes so the gateway can
@@ -26,6 +33,10 @@
 }:
 
 {
+  imports = [
+    ./aphrodite.nix
+  ];
+
   # ▸ 1. Hermes system user (created by hermes-agent NixOS module).
   #    systemd-journal so the gateway can read its own logs without
   #    sudo. openviking so the gateway can read the user_key env-file
@@ -51,29 +62,22 @@
     enable = true;
     addToSystemPackages = true;
 
-    # Register the PlayForm/Aphrodite-Hermes plugin as a
-    # NixOS-managed plugin. The activation script symlinks
-    # this derivation into ~/.hermes/plugins/nix-managed-aphrodite
-    # and the gateway auto-registers its 13 aphrodite_* tools +
-    # 5 hooks + a context engine on the next restart. The systemd
-    # proxy the plugin talks to lives in services.aphrodite
-    # (modules/services/aphrodite.nix), bound to 127.0.0.1:9798.
+    # Register the PlayForm/Aphrodite-Hermes plugin via the bare-
+    # name symlink in ~/.hermes/plugins/aphrodite. The activation
+    # script in ./aphrodite.nix materialises the plugin source
+    # tree (fetched via fetchFromGitHub) and the two companion
+    # binaries (aphrodite + libaphrodite_hermes.so, fetched via
+    # fetchurl from PlayForm/Aphrodite/releases) as Nix-store
+    # backed symlinks. The plugin's own __init__.py spawns the
+    # proxy binary as a subprocess on first tool call, so we do
+    # NOT need a separate systemd unit (services.aphrodite was
+    # removed). The proxy listens on 127.0.0.1:9798 by default.
     #
-    # The plugin source is a third-party checkout. We pre-stamp
-    # the derivation name so the symlink becomes
-    #   ~/.hermes/plugins/nix-managed-aphrodite
-    # (without `name = "..."`, fetchFromGitHub defaults to "source"
-    #  and you get nix-managed-source, which is uglier and collides
-    #  if a second plugin is ever added).
-    extraPlugins = [
-      (pkgs.fetchFromGitHub {
-        owner = "PlayForm";
-        repo = "Aphrodite-Hermes";
-        name = "aphrodite";
-        rev = "v2.0.7";
-        sha256 = "sha256-UTDRotOfw13Cvisg6Uerp5nh4fU19VXREU5H6fBANFQ=";
-      })
-    ];
+    # We intentionally do NOT use services.hermes-agent.extraPlugins
+    # here — that NixOS module creates a nix-managed-aphrodite
+    # symlink, not the bare-name aphrodite the plugin's
+    # download.sh expects, and we'd lose control of the
+    # binaries/ directory layout.
 
     # EnvironmentFiles are loaded in order. Later entries overwrite
     # earlier ones on duplicate KEYs. The first one is the
@@ -124,16 +128,13 @@
     # it routes via the same provider.
     settings.delegation.model = "aphrodite-token/minimax/MiniMax-M2.7";
     settings.toolsets = [ "all" ];
-    # The PlayForm/Aphrodite-Hermes plugin is registered as a
-    # NixOS-managed plugin via services.hermes-agent.extraPlugins
-    # (see hosts/aleroza-pc/hermes/default.nix). It auto-registers
-    # 13 aphrodite_* tools + 5 hooks + a context engine on the
-    # next gateway restart. The systemd proxy itself lives at
-    # services.aphrodite in modules/services/aphrodite.nix.
-    # (We intentionally do NOT set settings.plugins.aphrodite.enable
-    #  here — that path is for non-NixOS installs; the NixOS
-    #  module enables a plugin by symlinking it into
-    #  ~/.hermes/plugins/nix-managed-<name>.)
+
+    # Plugin enablement is handled by the activation script in
+    # ./aphrodite.nix, which materialises ~/.hermes/plugins/
+    # aphrodite as a Nix-store-backed symlink with hermes:hermes
+    # ownership. The gateway picks up plugins from ~/.hermes/
+    # plugins/ at startup automatically; no settings.plugins.*
+    # wiring needed here (that's the path for non-NixOS installs).
     settings.approvals.smartPolicy = ''
       ESCALATE any command whose argument list, after shell
       deobfuscation (quotes, escapes, $() substitution, backslash
@@ -187,9 +188,6 @@
       # };
     };
     settings.memory.provider = "openviking";
-    settings.plugins.enabled = [ "aphrodite" ];
-    settings.plugins.entries.aphrodite.allow_tool_override = true;
-
     settings.context.engine = "aphrodite";
     settings.context.engine_threshold_pct = 55;
 
