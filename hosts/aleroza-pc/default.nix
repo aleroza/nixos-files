@@ -78,9 +78,8 @@
 
     # OpenViking self-hosted context database. Bound to 127.0.0.1
     # only (container network=host + OPENVIKING_SERVER_HOST=127.0.0.1).
-    # Outbound traffic to Google's embedding + VLM endpoints goes
-    # through the host proxy (default). hermes-agent reads
-    # /opt/openviking/keys/user_key via EnvironmentFile.
+    # Embedding goes through local Ollama (services.ollama below);
+    # VLM still routes through Google via the host proxy.
     openviking.enable = true;
 
     # xserver.enable = true; @ Wayland in gnome
@@ -123,9 +122,35 @@
     ];
   };
 
-  # OpenViking reads the Google API key itself at activation
-  # time from the sops secret at /run/secrets/hermes/GOOGLE_API_KEY.
-  # The path is configured via services.openviking.embedding.apiKeyFile.
+  services.openviking.rootApiKey =
+    "ovk_" + lib.substring 0 32 (builtins.hashString "sha256" "aleroza-pc/openviking/root-api-key/v1");
+
+  # OpenViking VLM now routes through MiniMax instead of Google.
+  # The embedding block still points at local Ollama and doesn't
+  # need an API key.
+  services.openviking.vlm = {
+    apiBase = "https://api.minimax.io/v1";
+    model = "MiniMax-M3";
+    apiKeyFile = "/run/secrets/hermes/MINIMAX_API_KEY";
+  };
+
+  # ▸ Ollama — local embedding server for OpenViking.
+  # Binds to 127.0.0.1 only (no openFirewall). CPU-only build
+  # because the host has no GPU; 7 GB RAM is enough for
+  # nomic-embed-text-v1.5 Q4_K_M quant (84 MB on disk, ~150 MB
+  # RSS, embedding_length=768). ollama-model-loader.service
+  # pulls the model on first boot. Pulling directly from
+  # HuggingFace via Ollama's hf.co/... tag because Ollama's
+  # registry only ships F16 (~262 MB, ~3x larger) for this model,
+  # and Q4_K_M retains ~95% retrieval quality at a fraction of
+  # the RAM cost.
+  services.ollama = {
+    enable = true;
+    package = pkgs.ollama-cpu;
+    host = "127.0.0.1";
+    port = 11434;
+    loadModels = [ "hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q4_K_M" ];
+  };
 
   # ▸ Display manager override (DE модули ставят user = "", перебиваем тут)
   services.displayManager.autoLogin.user = lib.mkForce "aleroza";
@@ -169,6 +194,7 @@
       "aleroza/password" = alerozaSecret { };
       "aleroza/dockerhub/password" = alerozaSecret { };
       "hermes/GOOGLE_API_KEY" = alerozaSecret { };
+      "hermes/MINIMAX_API_KEY" = alerozaSecret { };
     };
 
   # ▸ Подсказываем интерактивному `sops`, какие правила шифрования применять.
@@ -183,6 +209,7 @@
       "wheel"
       "docker"
       "plocate"
+      "hermes"
     ];
   };
 
@@ -204,7 +231,6 @@
   # ▸ Shell-алиасы
   environment.shellAliases = {
     ll = "ls -lah";
-    nix-rebuild = "sudo nixos-rebuild switch --flake .#aleroza-pc";
     nix-gen = ''echo "Path: $(readlink /run/current-system)"; echo "  ID: $(readlink /nix/var/nix/profiles/system)"'';
   };
 

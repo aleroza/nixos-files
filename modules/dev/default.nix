@@ -16,7 +16,6 @@ in
   ];
 
   config = lib.mkIf cfg.enable {
-    programs.nix-ld.enable = true;
     environment.systemPackages = with pkgs; [
       git
       vim
@@ -24,6 +23,13 @@ in
 
       tldr
       p7zip
+    ];
+
+    programs.nix-ld.enable = true;
+    programs.nix-ld.libraries = with pkgs; [
+      gtk3
+      glib
+      libX11
     ];
   };
 }
