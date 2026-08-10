@@ -17,7 +17,13 @@
 #      promotes a hermes-built closure into the active system on
 #      /var/lib/hermes/workspace/.switch-request.
 
-{ config, lib, pkgs, hermes-agent, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  hermes-agent,
+  ...
+}:
 
 {
   # ▸ 1. Hermes system user (created by hermes-agent NixOS module).
@@ -117,7 +123,27 @@
     # Telegram notification so the user knows the upstream is
     # broken. Restart hermes-agent once the server is healthy and
     # the plugin reconnects.
+
+    settings.providers = {
+      minimax = {
+        api_key_env = "MINIMAX_API_KEY";
+        base_url = "https://api.minimax.io/anthropic";
+        provider = "anthropic";
+      };
+      # aphrodite-token = {
+      #   api_key_env = "MINIMAX_API_KEY";
+      #   base_url = "http://127.0.0.1:9798";
+      #   max_tokens = 65536;
+      #   provider = "openai";
+      # };
+    };
     settings.memory.provider = "openviking";
+    settings.plugins.enabled = [ "aphrodite" ];
+    settings.plugins.entries.aphrodite.allow_tool_override = true;
+
+    settings.context.engine = "aphrodite";
+    settings.context.engine_threshold_pct = 55;
+
     settings.memory.userProfileEnabled = true;
 
     # Fix "ModuleNotFoundError: No module named 'hermes_state_common'"
@@ -158,7 +184,12 @@
   security.sudo.extraRules = [
     {
       users = [ "hermes" ];
-      commands = [ { command = "ALL"; options = [ "NOPASSWD" ]; } ];
+      commands = [
+        {
+          command = "ALL";
+          options = [ "NOPASSWD" ];
+        }
+      ];
     }
   ];
 

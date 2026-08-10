@@ -85,7 +85,7 @@
     # Aphrodite CCR compression proxy on 127.0.0.1:9798. Hermes
     # routes through it when launched with `hermes --profile
     # aphrodite` (profile provisioned by users/modules/aphrodite.nix).
-    aphrodite.enable = true;
+    # aphrodite.enable = true;
 
     # xserver.enable = true; @ Wayland in gnome
     gnome = {
@@ -170,6 +170,7 @@
   # ▸ Группы
   users.groups = {
     openclaw = { };
+    aphrodite = { };
     plocate = { };
   };
 
