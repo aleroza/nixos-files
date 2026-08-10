@@ -218,24 +218,6 @@ in
         };
     };
 
-    # ▸ Aphrodite (CCR compression proxy for Hermes Agent)
-    aphrodite = {
-      enable = mkOption {
-        type = types.bool;
-        default = false;
-        description = ''
-          Enable Aphrodite CCR compression proxy on
-          127.0.0.1:9798. Compresses long tool-result outputs
-          (git diffs, build logs, browser snapshots, etc.) before
-          they reach the LLM, saving tens of thousands of tokens
-          per long session. Hermes routes through the proxy when
-          started with `hermes --profile aphrodite`; the user-
-          manager module under users/modules/aphrodite.nix
-          provisions that profile.
-        '';
-      };
-    };
-
     # ▸ Hermes host privileges
     # Gate for the temporary allowlist that gives hermes sudo
     # rights to restart openviking-* units + daemon-reload, AND
