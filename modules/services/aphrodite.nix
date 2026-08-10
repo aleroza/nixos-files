@@ -93,16 +93,21 @@ let
     catalog_intent_hints = ${if cfg.prompts.catalogIntentHints then "true" else "false"}
   '';
 
-  # preStart writes the rendered config into /etc/aphrodite/aphrodite.toml.
-  # Idempotent — overwrites on every activation so config drift between
-  # the closure and the live file is impossible.
+  # ExecStartPre writes the rendered config into
+  # /run/aphrodite/aphrodite.toml — a tmpfs directory that
+  # RuntimeDirectory=aphrodite creates at unit start. /etc is
+  # read-only under NixOS, so this avoids the mkdir failure that
+  # bites a naive /etc/aphrodite layout. The TOML lives in the
+  # ephemeral runtime directory; it's regenerated on every start
+  # from the closure-pinned derivation, so config drift between
+  # the store and the live file is impossible.
   preStartScript = pkgs.writeShellScript "aphrodite-pre-start" ''
     set -euo pipefail
 
-    CONF_DIR=/etc/aphrodite
-    CONF=$CONF_DIR/aphrodite.toml
+    CONF=/run/aphrodite/aphrodite.toml
 
-    mkdir -p "$CONF_DIR"
+    # RuntimeDirectory=aphrodite has already created /run/aphrodite
+    # owned by User=aphrodite. Just drop the config in.
     cp ${aphroditeConfig} "$CONF"
     chmod 0644 "$CONF"
 
@@ -390,20 +395,26 @@ in
         Restart = "on-failure";
         RestartSec = "10s";
 
-        # PreStart renders /etc/aphrodite/aphrodite.toml before
+        # RuntimeDirectory creates /run/aphrodite as a writable
+        # tmpfs at unit start. We drop the rendered config there
+        # because /etc is read-only under NixOS; APHRODITE_CONFIG_PATH
+        # below points at this writable path.
+        RuntimeDirectory = "aphrodite";
+
+        # PreStart renders /run/aphrodite/aphrodite.toml before
         # the unit's main process starts. NixOS's bash wrapper
-        # around preStart sets -euo pipefail; a non-zero exit
+        # around ExecStartPre sets -euo pipefail; a non-zero exit
         # blocks start (which is what we want here — without
         # a config file the proxy won't bind).
         ExecStartPre = preStartScript;
 
         # Override the proxy's default config-file search. The
         # upstream looks at ./aphrodite.toml and ~/.hermes/
-        # aphrodite/aphrodite.toml in that order; the hermes user
-        # doesn't own the latter, so we point explicitly at
-        # /etc/aphrodite/aphrodite.toml rendered above.
+        # aphrodite/aphrodite.toml in that order; we point
+        # explicitly at /run/aphrodite/aphrodite.toml rendered
+        # by ExecStartPre above.
         Environment = [
-          "APHRODITE_CONFIG_PATH=/etc/aphrodite/aphrodite.toml"
+          "APHRODITE_CONFIG_PATH=/run/aphrodite/aphrodite.toml"
           "APHRODITE_API_KEY_FILE=${cfg.apiKeyFile}"
         ];
 
