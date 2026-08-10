@@ -401,9 +401,11 @@ in
 
     dataDir = lib.mkOption {
       type = lib.types.path;
-      default = "/var/lib/aphrodite";
+      default = "/opt/aphrodite";
       description = ''
-        Persistent CCR store location for mode=token. Holds ccr.db.
+        WorkingDirectory for the proxy, and the parent of
+        ~/.hermes/aphrodite where the CCR SQLite store lands.
+        Defaults to /opt/aphrodite (created by tmpfiles.d).
         Survives reboots but is wiped by manual rm.
       '';
     };
@@ -431,7 +433,7 @@ in
 
     # CCR SQLite store lives in services.aphrodite.dataDir.
     systemd.tmpfiles.rules = [
-      "d /var/lib/aphrodite 0750 aphrodite aphrodite - -"
+      "d /opt/aphrodite 0750 aphrodite aphrodite - -"
     ];
 
     # Loopback-only by default; only open firewall when operator
@@ -478,6 +480,11 @@ in
         # by ExecStartPre above.
         Environment = [
           "APHRODITE_CONFIG_PATH=/run/aphrodite/aphrodite.toml"
+          # Pin HOME so the upstream proxy's default CCR-store
+          # path (~/.hermes/aphrodite) lands under /opt/aphrodite
+          # rather than the unit's stub /var/empty home (where
+          # ProtectSystem=strict forbids writes).
+          "HOME=/opt/aphrodite"
         ];
 
         # CCR SQLite store must survive restart. WorkingDirectory
