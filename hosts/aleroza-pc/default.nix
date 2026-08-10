@@ -130,7 +130,7 @@
   # need an API key.
   services.openviking.vlm = {
     apiBase = "https://api.minimax.io/v1";
-    model = "MiniMax-M2.7";
+    model = "MiniMax-M3";
     apiKeyFile = "/run/secrets/hermes/MINIMAX_API_KEY";
   };
 
