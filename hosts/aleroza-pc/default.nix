@@ -136,7 +136,11 @@
   services.openviking.vlm = {
     apiBase = "https://api.minimax.io/v1";
     model = "MiniMax-M3";
-    apiKeyFile = "/run/secrets/hermes/MINIMAX_API_KEY";
+    # Service-specific sops key (separate from the generic
+    # hermes/MINIMAX_API_KEY) declared in
+    # hosts/aleroza-pc/default.nix. PreStart reads this as root
+    # and bakes the value into ov.conf.
+    apiKeyFile = "/run/secrets/openviking/MINIMAX_API_KEY";
   };
 
   # ▸ Ollama — local embedding server for OpenViking.
@@ -199,14 +203,30 @@
       "aleroza/password" = alerozaSecret { };
       "aleroza/dockerhub/password" = alerozaSecret { };
       "hermes/GOOGLE_API_KEY" = alerozaSecret { };
-      # Aphrodite CCR compression proxy. Reuses the same
-    # MINIMAX_API_KEY the openviking.vlm path uses, but with
-    # group=aphrodite so the aphrodite-proxy.service unit can
-    # read it (the proxy runs as the dedicated aphrodite user).
-    "hermes/MINIMAX_API_KEY" = alerozaSecret {
-      group = "aphrodite";
-      mode = "0440";
-    };
+      # OpenViking uses its own key (not the generic hermes key) so
+      # that a leak in one path doesn't compromise the other. The
+      # preStart script in modules/services/openviking.nix reads it
+      # as root and bakes it into ov.conf — mode 0400 + owner=root
+      # is sufficient; preStart runs unprivileged enough that root
+      # ownership is required.
+      "openviking/MINIMAX_API_KEY" = {
+        sopsFile = ./secrets/users/aleroza.yaml;
+        owner = "root";
+        group = "root";
+        mode = "0400";
+      };
+      # Aphrodite uses its own key. The preStart script in
+      # modules/services/aphrodite.nix reads it as root (NixOS's
+      # bash wrapper around ExecStartPre) before dropping to
+      # User=aphrodite. mode 0400 + owner=root keeps the secret
+      # readable by preStart only; the aphrodite user itself never
+      # touches this file — it reads the rendered TOML instead.
+      "aphrodite/MINIMAX_API_KEY" = {
+        sopsFile = ./secrets/users/aleroza.yaml;
+        owner = "root";
+        group = "root";
+        mode = "0400";
+      };
     };
 
   # ▸ Подсказываем интерактивному `sops`, какие правила шифрования применять.
