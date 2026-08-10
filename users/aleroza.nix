@@ -15,7 +15,14 @@
   imports = [
     nix-flatpak.homeManagerModules.nix-flatpak
     ./modules/npm-global.nix
+    ./modules/aphrodite.nix
   ];
+
+  # When auto.aphrodite.enable is true, the aphrodite home-manager
+  # module provisions ~/.hermes/profiles/aphrodite/config.yaml so
+  # `hermes --profile aphrodite` works out of the box.
+  # Wrapped in lib.mkIf auto.aphrodite.enable so disabling the
+  # feature removes the profile cleanly.
 
   home.username = "aleroza";
   home.homeDirectory = "/home/aleroza";

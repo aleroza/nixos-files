@@ -21,6 +21,7 @@
     ./docker.nix
     ./network-capture.nix
     ./services/openviking.nix
+    ./services/aphrodite.nix
     ./nix-rebuild-meta.nix
   ];
 }
