@@ -58,7 +58,11 @@ in
         aphrodite-token:
           provider: openai
           base_url: http://127.0.0.1:9798
-          api_key_env: APHRODITE_API_KEY
+          # The systemd-managed proxy reads MINIMAX_API_KEY (its
+          # api_key_env). Same env var is sourced into user
+          # sessions from ~/.hermes/.env at gateway start, so
+          # hermes-agent can reuse it directly here.
+          api_key_env: MINIMAX_API_KEY
           max_tokens: 65536
         # Direct fallback если прокси выключен — Hermes пойдёт
         # на прямую с тем же ключом.

@@ -137,11 +137,13 @@ in
 
     apiKeyEnv = lib.mkOption {
       type = lib.types.str;
-      default = "APHRODITE_API_KEY";
+      default = "MINIMAX_API_KEY";
       description = ''
         Name of the env var the proxy reads for the upstream bearer.
-        Wired into the systemd EnvironmentFile at services.aphrodite.apiKeyFile
-        so the proxy's lookup matches the actual key path.
+        The systemd EnvironmentFile at services.aphrodite.apiKeyFile
+        must export a variable with this name. Default reuses the
+        MINIMAX_API_KEY already declared in aleroza.yaml at
+        /run/secrets/hermes/MINIMAX_API_KEY.
       '';
     };
 
@@ -415,7 +417,6 @@ in
         # by ExecStartPre above.
         Environment = [
           "APHRODITE_CONFIG_PATH=/run/aphrodite/aphrodite.toml"
-          "APHRODITE_API_KEY_FILE=${cfg.apiKeyFile}"
         ];
 
         # Read the bare API key as KEY=VALUE into the proxy's env.
