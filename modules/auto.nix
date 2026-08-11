@@ -215,7 +215,7 @@ in
           (embedding + VLM). Default keeps the host's local
           proxy; set null to disable.
         '';
-      };
+        };
     };
 
     # ▸ Hermes host privileges

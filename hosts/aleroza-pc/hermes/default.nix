@@ -6,6 +6,13 @@
 # drop in. See hosts/aleroza-pc/README.md for the full rationale.
 #
 # Sections:
+#   0. ./aphrodite.nix import — declares the PlayForm/Aphrodite-Hermes
+#      plugin + companion binaries (proxy + cdylib) as Nix store
+#      derivations; activation script symlinks them into
+#      ~/.hermes/plugins/aphrodite/ with hermes:hermes ownership.
+#      Plugin source lives in the store, not in /var/lib/hermes —
+#      only symlinks (clone mirror + plugin dir + binaries/) live
+#      on disk so upgrades from the store propagate on activation.
 #   1. Hermes system user (extraGroups).
 #   2. Hermes sops secret — environment variables the gateway needs
 #      (API keys, etc.). Owned by hermes:hermes so the gateway can
@@ -17,9 +24,19 @@
 #      promotes a hermes-built closure into the active system on
 #      /var/lib/hermes/workspace/.switch-request.
 
-{ config, lib, pkgs, hermes-agent, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  hermes-agent,
+  ...
+}:
 
 {
+  imports = [
+    ./aphrodite.nix
+  ];
+
   # ▸ 1. Hermes system user (created by hermes-agent NixOS module).
   #    systemd-journal so the gateway can read its own logs without
   #    sudo. openviking so the gateway can read the user_key env-file
@@ -44,6 +61,23 @@
   services.hermes-agent = {
     enable = true;
     addToSystemPackages = true;
+
+    # Register the PlayForm/Aphrodite-Hermes plugin via the bare-
+    # name symlink in ~/.hermes/plugins/aphrodite. The activation
+    # script in ./aphrodite.nix materialises the plugin source
+    # tree (fetched via fetchFromGitHub) and the two companion
+    # binaries (aphrodite + libaphrodite_hermes.so, fetched via
+    # fetchurl from PlayForm/Aphrodite/releases) as Nix-store
+    # backed symlinks. The plugin's own __init__.py spawns the
+    # proxy binary as a subprocess on first tool call, so we do
+    # NOT need a separate systemd unit (services.aphrodite was
+    # removed). The proxy listens on 127.0.0.1:9798 by default.
+    #
+    # We intentionally do NOT use services.hermes-agent.extraPlugins
+    # here — that NixOS module creates a nix-managed-aphrodite
+    # symlink, not the bare-name aphrodite the plugin's
+    # download.sh expects, and we'd lose control of the
+    # binaries/ directory layout.
 
     # EnvironmentFiles are loaded in order. Later entries overwrite
     # earlier ones on duplicate KEYs. The first one is the
@@ -72,13 +106,46 @@
       OPENVIKING_ENDPOINT = "http://127.0.0.1:1933";
       OPENVIKING_ACCOUNT = "default";
       OPENVIKING_USER = "default";
+
+      # Opt-in flag for the Aphrodite plugin's context-engine
+      # registration. The plugin's on_session_start hook only
+      # calls ctx.register_context_engine(...) if this is set,
+      # otherwise it stays silent and Hermes falls back to its
+      # built-in compressor with a 'Context engine aphrodite
+      # not found' warning. The AphroditeContextEngine class
+      # itself is a noop (should_compress returns False,
+      # compress returns messages unchanged) — it's just a
+      # presence signal so Hermes treats the plugin as the
+      # configured context engine. Real compression still
+      # flows through the proxy's transform_tool_result hook.
+      APHRODITE_CONTEXT_ENGINE = "1";
     };
-    settings.model = "minimax/MiniMax-M3";
-    # Sub-agents inherit delegation.model from settings; primary session
-    # keeps settings.model above. Hyp: upstream module accepts unknown
-    # sub-keys and merges them into the gateway user-level YAML.
-    settings.delegation.model = "minimax/MiniMax-M2.7";
+    # Default to routing through the local Aphrodite CCR proxy
+    # (127.0.0.1:9798, see services.aphrodite). The model name
+    # uses the "provider/model" form so the gateway resolves it
+    # against the providers.* map below. Switching the upstream
+    # model name in one place (services.aphrodite.defaultModel)
+    # propagates here.
+    settings.model = "aphrodite-token/minimax/MiniMax-M3";
+    settings.providers.aphrodite-token = {
+      provider = "openai";
+      base_url = "http://127.0.0.1:9798";
+      api_key_env = "MINIMAX_API_KEY";
+      max_tokens = 65536;
+    };
+    # Sub-agents inherit delegation.model from settings; primary
+    # session keeps settings.model above. Aphrodite proxies the
+    # M2.7 model through the same upstream (api_url+api_key), so
+    # it routes via the same provider.
+    settings.delegation.model = "aphrodite-token/minimax/MiniMax-M2.7";
     settings.toolsets = [ "all" ];
+
+    # Plugin enablement is handled by the activation script in
+    # ./aphrodite.nix, which materialises ~/.hermes/plugins/
+    # aphrodite as a Nix-store-backed symlink with hermes:hermes
+    # ownership. The gateway picks up plugins from ~/.hermes/
+    # plugins/ at startup automatically; no settings.plugins.*
+    # wiring needed here (that's the path for non-NixOS installs).
     settings.approvals.smartPolicy = ''
       ESCALATE any command whose argument list, after shell
       deobfuscation (quotes, escapes, $() substitution, backslash
@@ -117,7 +184,18 @@
     # Telegram notification so the user knows the upstream is
     # broken. Restart hermes-agent once the server is healthy and
     # the plugin reconnects.
+
+    settings.providers = {
+      minimax = {
+        api_key_env = "MINIMAX_API_KEY";
+        base_url = "https://api.minimax.io/anthropic";
+        provider = "anthropic";
+      };
+    };
     settings.memory.provider = "openviking";
+    settings.context.engine = "aphrodite";
+    settings.context.engine_threshold_pct = 55;
+
     settings.memory.userProfileEnabled = true;
 
     # Fix "ModuleNotFoundError: No module named 'hermes_state_common'"
@@ -158,7 +236,12 @@
   security.sudo.extraRules = [
     {
       users = [ "hermes" ];
-      commands = [ { command = "ALL"; options = [ "NOPASSWD" ]; } ];
+      commands = [
+        {
+          command = "ALL";
+          options = [ "NOPASSWD" ];
+        }
+      ];
     }
   ];
 
@@ -171,6 +254,11 @@
   # Units that hermes-agent itself spawns keep their full hardening.
   systemd.services.hermes-agent.serviceConfig.NoNewPrivileges = lib.mkForce false;
   systemd.services.hermes-agent.serviceConfig.ProtectSystem = lib.mkForce "no";
+
+  # Needed for linking Aphrodite library
+  systemd.services.hermes-agent.serviceConfig.Environment = [
+    "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}"
+  ];
 
   # ▸ 4. Hermes-triggered system activation.
   #    Root systemd unit + path trigger so hermes can switch

@@ -131,7 +131,11 @@
   services.openviking.vlm = {
     apiBase = "https://api.minimax.io/v1";
     model = "MiniMax-M3";
-    apiKeyFile = "/run/secrets/hermes/MINIMAX_API_KEY";
+    # Service-specific sops key (separate from the generic
+    # hermes/MINIMAX_API_KEY) declared in
+    # hosts/aleroza-pc/default.nix. PreStart reads this as root
+    # and bakes the value into ov.conf.
+    apiKeyFile = "/run/secrets/openviking/MINIMAX_API_KEY";
   };
 
   # ▸ Ollama — local embedding server for OpenViking.
@@ -194,7 +198,25 @@
       "aleroza/password" = alerozaSecret { };
       "aleroza/dockerhub/password" = alerozaSecret { };
       "hermes/GOOGLE_API_KEY" = alerozaSecret { };
-      "hermes/MINIMAX_API_KEY" = alerozaSecret { };
+      # OpenViking uses its own key (not the generic hermes key) so
+      # that a leak in one path doesn't compromise the other. The
+      # preStart script in modules/services/openviking.nix reads it
+      # as root and bakes it into ov.conf — mode 0400 + owner=root
+      # is sufficient; preStart runs unprivileged enough that root
+      # ownership is required.
+      "openviking/MINIMAX_API_KEY" = {
+        sopsFile = ./secrets/users/aleroza.yaml;
+        owner = "root";
+        group = "root";
+        mode = "0400";
+      };
+      # Aphrodite reuses the generic hermes key. The proxy binary
+      # is spawned by the PlayForm/Aphrodite-Hermes plugin's
+      # __init__.py as the gateway's User=hermes, and reads the
+      # API key from the same MINIMAX_API_KEY environment variable
+      # the gateway already exposes (sourced from
+      # /run/secrets/hermes/env at gateway start). No separate
+      # aphrodite/* sops secret needed.
     };
 
   # ▸ Подсказываем интерактивному `sops`, какие правила шифрования применять.
