@@ -106,8 +106,6 @@
       OPENVIKING_ENDPOINT = "http://127.0.0.1:1933";
       OPENVIKING_ACCOUNT = "default";
       OPENVIKING_USER = "default";
-
-      LD_LIBRARY_PATH = lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ];
     };
     # Default to routing through the local Aphrodite CCR proxy
     # (127.0.0.1:9798, see services.aphrodite). The model name
@@ -249,6 +247,11 @@
   # Units that hermes-agent itself spawns keep their full hardening.
   systemd.services.hermes-agent.serviceConfig.NoNewPrivileges = lib.mkForce false;
   systemd.services.hermes-agent.serviceConfig.ProtectSystem = lib.mkForce "no";
+
+  # Needed for linking Aphrodite library
+  systemd.services.hermes-agent.serviceConfig.Environment = [
+    "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}"
+  ];
 
   # ▸ 4. Hermes-triggered system activation.
   #    Root systemd unit + path trigger so hermes can switch
