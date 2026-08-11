@@ -239,7 +239,14 @@
     #    flclash/VPN proxy at 127.0.0.1:7890 as everything else
     #    on the host.
     settings.mcp_servers.scrapling = {
-      command = "docker";
+      # Full path to docker. hermes-agent runs as the `hermes` user via
+      # systemd with a fixed PATH (hermes-agent + coreutils + bash), which
+      # doesn't include ~/.local/state/nix/profiles/profile/bin where
+      # docker lives. mcp_tool invokes the command via subprocess.Popen
+      # with no shell, so the bare name `docker` resolved through
+      # $PATH and fails with FileNotFoundError. Hardcoding the path
+      # sidesteps that.
+      command = "/var/lib/hermes/.local/state/nix/profiles/profile/bin/docker";
       args = [
         "run" "-i" "--rm"
         "--network" "host"
