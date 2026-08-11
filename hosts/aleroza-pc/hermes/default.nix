@@ -218,6 +218,49 @@
       language = "ru";
     };
 
+    # ▸ MCP servers (stdio transport).
+    #    Hermes spawns these as child processes per-tool-call.
+    #    Lifecycle = tool-call lifecycle; no long-running service.
+    #
+    #    Scrapling (D4Vinci/Scrapling) — adaptive web-fetch with
+    #    built-in anti-bot bypass (Cloudflare Turnstile, fingerprint
+    #    spoofing). Runs as `mcp` stdio server inside the
+    #    pyd4vinci/scrapling image (matches the upstream Docker
+    #    example in Scrapling's docs).
+    #
+    #    `--network host` makes the container share the host's
+    #    network stack — chromium inside the container exits on
+    #    the same egress IP as the host, useful for sites that
+    #    pin by source IP.
+    #
+    #    `-e HTTP_PROXY/HTTPS_PROXY/NO_PROXY` (without `=value`)
+    #    propagates the parent's env into the container, so
+    #    curl_cffi and Playwright inside route through the same
+    #    flclash/VPN proxy at 127.0.0.1:7890 as everything else
+    #    on the host.
+    settings.mcp_servers.scrapling = {
+      command = "docker";
+      args = [
+        "run" "-i" "--rm"
+        "--network" "host"
+        "-e" "HTTP_PROXY"
+        "-e" "HTTPS_PROXY"
+        "-e" "NO_PROXY"
+        "pyd4vinci/scrapling:latest"
+        "mcp"
+      ];
+      env = {
+        HTTP_PROXY = "http://127.0.0.1:7890";
+        HTTPS_PROXY = "http://127.0.0.1:7890";
+        NO_PROXY = "127.0.0.1,localhost,::1";
+      };
+      # MCP servers default to a short connect timeout. Scrapling
+      # cold-starts a chromium browser on first tool call, which
+      # can take 5-8s on the 4300U. Give it room.
+      connect_timeout = 30;
+      timeout = 60;
+    };
+
     # Fix "ModuleNotFoundError: No module named 'hermes_state_common'"
     package =
       let
