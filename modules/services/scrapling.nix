@@ -13,7 +13,7 @@
 #     pyd4vinci/scrapling image — there's no shell inside the image
 #     (entrypoint is `scrapling-mcp`), so we can't run
 #     `scrapling install --force` inside a `--rm` container.
-#     Persistent container gets a real shell via `docker exec`.
+#     Persistent container gets a real shell via `podman exec`.
 #   - The image does NOT bundle chromium; only the Python package.
 #     Persistent container survives the `scrapling install` step
 #     (which downloads chromium + playwright deps into /root/.cache).
@@ -56,23 +56,6 @@
 let
   cfg = config.services.scrapling;
   autoCfg = config.auto.scrapling;
-
-  # Per-call exec into the running container to install chromium.
-  # Idempotent: scrapling install --force re-runs without harm.
-  # Runs as root in a systemd oneshot, after the oci-container is up.
-  installScript = pkgs.writeShellScript "scrapling-install" ''
-    set -euo pipefail
-    echo "scrapling-install: waiting for container to be running..."
-    # oci-containers names the unit after the container name. We use
-    # `podman-scrapling` because the daemon is docker (which still emits
-    # `podman-*` unit names when the daemon is podman-compatible, i.e.
-    # docker on NixOS).
-    ${pkgs.systemd}/bin/systemctl is-active --wait-only podman-scrapling.service
-    echo "scrapling-install: running scrapling install --force inside container"
-    ${pkgs.docker-client}/bin/docker exec scrapling \
-      ${cfg.installCommand}
-    echo "scrapling-install: done"
-  '';
 in
 {
   options.services.scrapling = {
@@ -148,11 +131,13 @@ in
 
     installCommand = lib.mkOption {
       type = lib.types.str;
-      default = "scrapling install --force";
+      default = "install --force";
       description = ''
         Command to run inside the container after it starts. The
-        default `scrapling install --force` downloads chromium +
-        playwright deps. Idempotent.
+        default `install --force` invokes scrapling's `install`
+        subcommand via the uv-tool wrapper (entrypoint = `uv run
+        scrapling`, console scripts pass through as args). This
+        downloads chromium + playwright deps. Idempotent.
       '';
     };
   };
@@ -218,23 +203,42 @@ in
       ];
     };
 
-    # Run `scrapling install --force` once after the container is up.
-    # This is a oneshot with RemainAfterExit=yes: it succeeds once and
-    # doesn't run again unless the user wipes /var/lib/scrapling.
-    # Idempotent at the scrapling level: `install --force` re-runs the
-    # dependency check without breaking things.
-    systemd.services.scrapling-install = {
-      wantedBy = [ "multi-user.target" ];
-      after = [ "podman-scrapling.service" ];
-      wants = [ "podman-scrapling.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        # Allow a long timeout (chromium download is ~170MB).
-        TimeoutStartSec = "10min";
-      };
-      path = [ pkgs.docker-client ];
-      script = installScript;
+    # Run `scrapling install -f` once at activation time, as root,
+    # so chromium is downloaded into the persistent state dir
+    # BEFORE the container's MCP HTTP endpoint becomes available
+    # to hermes.
+    #
+    # Why this is in activation, not a systemd oneshot:
+    #   systemd oneshots run as the systemd user manager's user.
+    #   On NixOS, podman exec requires root for rootful containers
+    #   (oci-containers-managed), but rootless podman (the users
+    #   default) cannot see them.
+    #   Activation scripts always run as root, which is the user
+    #   oci-containers uses to launch the container.
+    #
+    # Why we run a transient podman run --rm here:
+    #   The persistent container scrapling does not exist yet on
+    #   first activation. We use a separate ephemeral container
+    #   with the same image and the same persistent volume mount
+    #   to install chromium into the state dir. Once installed,
+    #   the persistent container (launched later in the same
+    #   activation cycle by oci-containers) finds chromium
+    #   already in the persistent .cache/ms-playwright.
+    system.activationScripts.scrapling-pre-install = {
+      text = ''
+        if [ ! -d "${cfg.persistentStateDir}/.cache/ms-playwright" ]; then
+          echo "scrapling-pre-install: downloading chromium via ephemeral container"
+          ${pkgs.podman}/bin/podman run --rm \
+            --network=host \
+            -v ${cfg.persistentStateDir}:/root \
+            -e HOME=/root \
+            ${cfg.image} \
+            install -f
+        else
+          echo "scrapling-pre-install: chromium already installed, skipping"
+        fi
+      '';
+      deps = [ "specialfs" ];
     };
   };
 }
