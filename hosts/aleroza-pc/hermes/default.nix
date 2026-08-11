@@ -198,6 +198,26 @@
 
     settings.memory.userProfileEnabled = true;
 
+    # ▸ STT (speech-to-text) for voice messages on Telegram.
+    #    Groq's whisper-large-v3 gives excellent Russian
+    #    recognition, free tier, and offloads work from the CPU
+    #    (important on the 4300U / 7GB host). The GROQ_API_KEY
+    #    is provisioned by /run/secrets/hermes/env (sops secret,
+    #    see sops.secrets."hermes/env" above). The gateway reads
+    #    api_key_env, fetches the key from the gateway's
+    #    environment, and forwards it to Groq.
+    settings.stt = {
+      enabled = true;
+      provider = "groq";
+      groq.api_key_env = "GROQ_API_KEY";
+      # Pin the transcription language to Russian. Without this hint,
+      # Groq's whisper-large-v3 sometimes "drifts" to English on short
+      # voice notes (a known whisper behaviour) and the user sees an
+      # English transcript of Russian speech. Resolution order in
+      # hermes-cli: stt.<provider>.language → stt.language → env.
+      language = "ru";
+    };
+
     # Fix "ModuleNotFoundError: No module named 'hermes_state_common'"
     package =
       let
