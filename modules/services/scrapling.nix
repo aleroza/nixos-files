@@ -259,13 +259,21 @@ in
         fi
         # Always (re)create the chromium -> chromium-NNNN symlink, in
         # case the latest playwright revision bumped since last install.
-        # -delete the old symlink first so ln -s doesn't complain about
-        # an existing entry.
+        # Use /root/.cache/ms-playwright/chromium-1234 as the target
+        # (a path INSIDE the container), not the host-side
+        # /var/lib/scrapling/.cache/ms-playwright/chromium-1234.
+        # Even though they're the same directory (host dir is
+        # bind-mounted into the container at /root), symlinks resolve
+        # to whatever path they were created with; an absolute path
+        # to a host-only directory will be invalid inside the
+        # container, while a relative or /root-anchored path works.
         rm -f ${cfg.persistentStateDir}/.cache/ms-playwright/chromium
         chromium_dir=$(ls -d ${cfg.persistentStateDir}/.cache/ms-playwright/chromium-* 2>/dev/null | head -n1)
         if [ -n "$chromium_dir" ]; then
-          ln -s "$chromium_dir" ${cfg.persistentStateDir}/.cache/ms-playwright/chromium
-          echo "scrapling-pre-install: chromium symlink -> $chromium_dir"
+          # Strip the host prefix, leaving a /root-anchored path.
+          rel_path="/root${chromium_dir#${cfg.persistentStateDir}}"
+          ln -s "$rel_path" ${cfg.persistentStateDir}/.cache/ms-playwright/chromium
+          echo "scrapling-pre-install: chromium symlink -> $rel_path"
         fi
       '';
       deps = [ "specialfs" ];
