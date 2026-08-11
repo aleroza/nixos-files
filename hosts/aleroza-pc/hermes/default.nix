@@ -191,12 +191,6 @@
         base_url = "https://api.minimax.io/anthropic";
         provider = "anthropic";
       };
-      # aphrodite-token = {
-      #   api_key_env = "MINIMAX_API_KEY";
-      #   base_url = "http://127.0.0.1:9798";
-      #   max_tokens = 65536;
-      #   provider = "openai";
-      # };
     };
     settings.memory.provider = "openviking";
     settings.context.engine = "aphrodite";
