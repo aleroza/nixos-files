@@ -106,6 +106,19 @@
       OPENVIKING_ENDPOINT = "http://127.0.0.1:1933";
       OPENVIKING_ACCOUNT = "default";
       OPENVIKING_USER = "default";
+
+      # Opt-in flag for the Aphrodite plugin's context-engine
+      # registration. The plugin's on_session_start hook only
+      # calls ctx.register_context_engine(...) if this is set,
+      # otherwise it stays silent and Hermes falls back to its
+      # built-in compressor with a 'Context engine aphrodite
+      # not found' warning. The AphroditeContextEngine class
+      # itself is a noop (should_compress returns False,
+      # compress returns messages unchanged) — it's just a
+      # presence signal so Hermes treats the plugin as the
+      # configured context engine. Real compression still
+      # flows through the proxy's transform_tool_result hook.
+      APHRODITE_CONTEXT_ENGINE = "1";
     };
     # Default to routing through the local Aphrodite CCR proxy
     # (127.0.0.1:9798, see services.aphrodite). The model name
