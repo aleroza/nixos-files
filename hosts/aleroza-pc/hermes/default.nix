@@ -250,6 +250,14 @@
       # enabled via virtualisation.docker.enable = true). Hardcoding
       # that path sidesteps the PATH issue.
       command = "/run/current-system/sw/bin/docker";
+      # Chromium path is resolved at evaluation time via pkgs.chromium,
+      # so the closure's hash determines the actual path (stable across
+      # rebuilds until chromium itself updates). We pass it to
+      # `scrapling mcp --executable-path` so the browser-based MCP
+      # tools (fetch, stealthy_fetch, screenshot, open_session) find
+      # chromium at runtime instead of trying to download it via
+      # playwright install — which fails inside the entrypoint-only
+      # container.
       args = [
         "run" "-i" "--rm"
         "--network" "host"
@@ -258,6 +266,8 @@
         "-e" "NO_PROXY"
         "pyd4vinci/scrapling:latest"
         "mcp"
+        "--executable-path"
+        "${pkgs.chromium}/bin/chromium"
       ];
       env = {
         HTTP_PROXY = "http://127.0.0.1:7890";
