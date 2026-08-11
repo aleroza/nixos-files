@@ -159,7 +159,11 @@ in
           ln -sfn "$PLUGIN_SRC" "$CLONE_PATH"
         fi
         chown -h hermes:hermes "$CLONE_PATH"
-        chmod 0755 "$CLONE_PATH"
+        # -h: target the symlink itself, not its read-only store
+        # target. Without -h, chmod on a symlink-to-store-path
+        # fails with "Read-only file system" and the whole
+        # activate script aborts (set -e).
+        chmod -h 0755 "$CLONE_PATH"
 
         # ────────────────────────────────────────────────────────
         # Plugin directory. MUST be a real directory (the plugin
@@ -190,7 +194,8 @@ in
             ln -sfn "$PLUGIN_SRC/${f}" "$PLUGIN_DIR/${f}"
           fi
           chown -h hermes:hermes "$PLUGIN_DIR/${f}"
-          chmod 0644 "$PLUGIN_DIR/${f}"
+          # -h: chmod the symlink, not the read-only store target.
+          chmod -h 0644 "$PLUGIN_DIR/${f}"
         '') pluginFiles}
 
         # ────────────────────────────────────────────────────────
@@ -215,7 +220,8 @@ in
             ln -sfn "$src" "$dest"
           fi
           chown -h hermes:hermes "$dest"
-          chmod 0755 "$dest"
+          # -h: chmod the symlink, not the read-only store target.
+          chmod -h 0755 "$dest"
         done
 
         echo "aphrodite-plugin: $PLUGIN_DIR/ (real, hermes:hermes 0750)"
