@@ -242,11 +242,14 @@
       # Full path to docker. hermes-agent runs as the `hermes` user via
       # systemd with a fixed PATH (hermes-agent + coreutils + bash), which
       # doesn't include ~/.local/state/nix/profiles/profile/bin where
-      # docker lives. mcp_tool invokes the command via subprocess.Popen
-      # with no shell, so the bare name `docker` resolved through
-      # $PATH and fails with FileNotFoundError. Hardcoding the path
-      # sidesteps that.
-      command = "/var/lib/hermes/.local/state/nix/profiles/profile/bin/docker";
+      # docker is NOT actually installed on this host. mcp_tool spawns
+      # the command via subprocess.Popen without a shell, so the bare
+      # name `docker` resolved through $PATH and fails with
+      # FileNotFoundError. Real docker binary is at
+      # /run/current-system/sw/bin/docker (NixOS system closure,
+      # enabled via virtualisation.docker.enable = true). Hardcoding
+      # that path sidesteps the PATH issue.
+      command = "/run/current-system/sw/bin/docker";
       args = [
         "run" "-i" "--rm"
         "--network" "host"
