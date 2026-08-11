@@ -82,17 +82,32 @@ let
     sha256 = "286a9866de0abe95c358037db2a25f6d21a36d52e2d503252879a32fcf99c82b";
   };
 
-  # Files from the plugin source we want to symlink into
-  # ~/.hermes/plugins/aphrodite/. We don't want everything in the
-  # store path (.git/ is ~5MB of git metadata) — just what the
-  # plugin needs to load + a couple of supporting files.
+  # Files from the plugin source we want to install into
+  # ~/.hermes/plugins/aphrodite/. The Python loader resolves
+  # `Path(__file__).resolve().parent` to find binaries/ — and
+  # `.resolve()` follows symlinks. So __init__.py MUST be a real
+  # file (or hardlink) in the plugin directory, otherwise the
+  # loader thinks _PLUGIN_DIR lives in /nix/store/... and tries
+  # to open /nix/store/.../binaries/libaphrodite_hermes.so (which
+  # doesn't exist there), giving up with 'Dylib not found'.
+  #
+  # Everything else can stay as a symlink — plugin.yaml is just
+  # parsed, download.sh / README.md / BINARY_VERSION are never
+  # read by the loader. .git/ stays in the store only (we don't
+  # ship it to the plugin dir; humans use the /var/lib/hermes/
+  # Aphrodite-Hermes clone-mirror for that).
   pluginFiles = [
     "plugin.yaml"
-    "__init__.py"
     "BINARY_VERSION"
     "download.sh"
     "download.ps1"
     "README.md"
+  ];
+
+  # Python source files: copied (not symlinked) so Path(__file__)
+  # resolves to the real plugin directory.
+  pythonFiles = [
+    "__init__.py"
   ];
 
   hermesHome = "/var/lib/hermes";
@@ -197,6 +212,46 @@ in
           # -h: chmod the symlink, not the read-only store target.
           chmod -h 0644 "$PLUGIN_DIR/${f}"
         '') pluginFiles}
+
+        # ────────────────────────────────────────────────────────
+        # Python source files. COPIED (not symlinked) so
+        # Path(__file__).resolve() inside the Python loader sees
+        # the real /var/lib/hermes/.hermes/plugins/aphrodite/ as
+        # the plugin directory — otherwise it follows the
+        # symlink into /nix/store/.../source and tries to find
+        # binaries/ relative to a path that has no binaries/
+        # subdirectory, giving up with 'Dylib not found'.
+        #
+        # Idempotent: copy only if the existing file is a
+        # symlink-to-wrong-target, missing, or stale (different
+        # size from the source). Plain `cp` overwrites
+        # unconditionally; we use the size-mismatch gate to
+        # avoid clobbering user edits inside __init__.py.
+        # ────────────────────────────────────────────────────────
+        ${lib.concatMapStrings (f: ''
+          dest="$PLUGIN_DIR/${f}"
+          src="$PLUGIN_SRC/${f}"
+          need_copy=0
+          if [[ ! -e "$dest" ]]; then
+            need_copy=1
+          elif [[ -L "$dest" ]]; then
+            # A symlink here is wrong (would break Path.resolve()).
+            # Remove and replace with a real file.
+            rm -f "$dest"
+            need_copy=1
+          else
+            src_size=$(stat -c%s "$src" 2>/dev/null || echo 0)
+            dst_size=$(stat -c%s "$dest" 2>/dev/null || echo 0)
+            if [[ "$src_size" != "$dst_size" ]] || [[ "$src_size" -eq 0 ]]; then
+              need_copy=1
+            fi
+          fi
+          if [[ "$need_copy" -eq 1 ]]; then
+            cp -f "$src" "$dest"
+          fi
+          chown hermes:hermes "$dest"
+          chmod 0644 "$dest"
+        '') pythonFiles}
 
         # ────────────────────────────────────────────────────────
         # Binaries subdirectory + two binary symlinks. Mode 0755
