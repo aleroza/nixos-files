@@ -82,16 +82,6 @@
     # VLM still routes through Google via the host proxy.
     openviking.enable = true;
 
-    # Scrapling MCP — adaptive web-fetch container (D4Vinci/Scrapling).
-    # Spawned per-tool-call by hermes-agent as a stdio MCP server
-    # (`docker run -i --rm --network host pyd4vinci/scrapling mcp`).
-    # See modules/services/scrapling.nix and
-    # hosts/aleroza-pc/hermes/default.nix → settings.mcp_servers.scrapling.
-    # Setting this to true also enables services.scrapling.prePull so
-    # the image is fetched at activation time, paying the pull cost
-    # up-front.
-    scrapling.enable = true;
-
     # xserver.enable = true; @ Wayland in gnome
     gnome = {
       enable = true;
