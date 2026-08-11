@@ -252,22 +252,26 @@
       command = "/run/current-system/sw/bin/docker";
       # Chromium path is resolved at evaluation time via pkgs.chromium,
       # so the closure's hash determines the actual path (stable across
-      # rebuilds until chromium itself updates). We pass it to
-      # `scrapling mcp --executable-path` so the browser-based MCP
-      # tools (fetch, stealthy_fetch, screenshot, open_session) find
-      # chromium at runtime instead of trying to download it via
-      # playwright install — which fails inside the entrypoint-only
-      # container.
+      # rebuilds until chromium itself updates).
+      #
+      # We bind-mount the host's chromium binary into the container at
+      # /chromium (single-file mount: -v src:dst:ro), and pass that
+      # path to `scrapling mcp --executable-path /chromium`. This way:
+      # - The browser-based MCP tools (fetch, stealthy_fetch, screenshot,
+      #   open_session) find a working chromium at runtime.
+      # - No Dockerfile prebake (no need to maintain a custom image).
+      # - No persistent container (one `docker run --rm` per tool call).
+      # - No nix-store pass-through (just one binary file mount).
       args = [
         "run" "-i" "--rm"
         "--network" "host"
         "-e" "HTTP_PROXY"
         "-e" "HTTPS_PROXY"
         "-e" "NO_PROXY"
+        "-v" "${pkgs.chromium}/bin/chromium:/chromium:ro"
         "pyd4vinci/scrapling:latest"
         "mcp"
-        "--executable-path"
-        "${pkgs.chromium}/bin/chromium"
+        "--executable-path" "/chromium"
       ];
       env = {
         HTTP_PROXY = "http://127.0.0.1:7890";
