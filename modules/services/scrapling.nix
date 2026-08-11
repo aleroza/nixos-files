@@ -179,6 +179,16 @@ in
         # --network=host, "127.0.0.1" is the host's loopback.
         # Override via --http-host CLI flag below.
         HOME = "/root";
+        # Point scrapling at the chromium symlink created by the
+        # activation script (scrapling-pre-install). The symlink
+        # resolves to whichever chromium-NNNN exists in the
+        # persistent state dir, regardless of Playwright revision.
+        # Without this, scrapling looks for chromium-1228 (the
+        # version baked into the image at build time) and errors
+        # with "Executable doesn't exist" because `scrapling install`
+        # always fetches the latest Playwright chromium revision,
+        # which drifts over time (1228 -> 1234 -> ...).
+        SCRAPLING_EXECUTABLE_PATH = "/root/.cache/ms-playwright/chromium/chrome-linux64/chrome";
       }
       // lib.optionalAttrs (cfg.proxyUrl != null) {
         HTTP_PROXY = cfg.proxyUrl;
@@ -224,9 +234,19 @@ in
     #   the persistent container (launched later in the same
     #   activation cycle by oci-containers) finds chromium
     #   already in the persistent .cache/ms-playwright.
+    #
+    # Idempotency: skip if chromium is already installed (the
+    # playwright cache directory has INSTALLATION_COMPLETE marker).
+    # Also create a /root/.cache/ms-playwright/chromium symlink
+    # pointing at whichever chromium-NNNN exists, so scrapling
+    # can find the binary via SCRAPLING_EXECUTABLE_PATH=/root/.cache/ms-playwright/chromium/chrome
+    # regardless of which Playwright revision `scrapling install`
+    # fetched (1228, 1234, 1244, ...). The image was built with
+    # playwright pinned to chromium-1228, but `scrapling install`
+    # always fetches the latest version, and these versions drift.
     system.activationScripts.scrapling-pre-install = {
       text = ''
-        if [ ! -d "${cfg.persistentStateDir}/.cache/ms-playwright" ]; then
+        if [ ! -f "${cfg.persistentStateDir}/.cache/ms-playwright/INSTALLATION_COMPLETE" ]; then
           echo "scrapling-pre-install: downloading chromium via ephemeral container"
           ${pkgs.podman}/bin/podman run --rm \
             --network=host \
@@ -235,7 +255,17 @@ in
             ${cfg.image} \
             install -f
         else
-          echo "scrapling-pre-install: chromium already installed, skipping"
+          echo "scrapling-pre-install: chromium already installed, skipping download"
+        fi
+        # Always (re)create the chromium -> chromium-NNNN symlink, in
+        # case the latest playwright revision bumped since last install.
+        # -delete the old symlink first so ln -s doesn't complain about
+        # an existing entry.
+        rm -f ${cfg.persistentStateDir}/.cache/ms-playwright/chromium
+        chromium_dir=$(ls -d ${cfg.persistentStateDir}/.cache/ms-playwright/chromium-* 2>/dev/null | head -n1)
+        if [ -n "$chromium_dir" ]; then
+          ln -s "$chromium_dir" ${cfg.persistentStateDir}/.cache/ms-playwright/chromium
+          echo "scrapling-pre-install: chromium symlink -> $chromium_dir"
         fi
       '';
       deps = [ "specialfs" ];
