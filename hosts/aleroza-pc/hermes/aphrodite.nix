@@ -254,9 +254,16 @@ in
         '') pythonFiles}
 
         # ────────────────────────────────────────────────────────
-        # Binaries subdirectory + two binary symlinks. Mode 0755
-        # on the binaries themselves (the .so is dlopen'd as
-        # code, the proxy is exec'd).
+        # Binaries subdirectory + two binaries. Copied (not
+        # symlinked) because the plugin's _start_proxy() does
+        # `os.chmod(binary, 0o755)` when os.access(binary, X_OK)
+        # fails — and chmod follows symlinks, so a symlinked
+        # binary pointing at /nix/store/<hash>-bin would fail
+        # with [Errno 30] Read-only file system against the
+        # immutable store target.
+        #
+        # The .so stays small enough (74 MB total for both) that
+        # duplicating it on disk instead of in the store is fine.
         # ────────────────────────────────────────────────────────
         if [[ ! -d "$BIN_DIR" ]]; then
           mkdir -p "$BIN_DIR"
@@ -271,18 +278,147 @@ in
           name="''${pair%%::*}"
           src="''${pair##*::}"
           dest="$BIN_DIR/$name"
-          if [[ ! -L "$dest" ]] || [[ "$(readlink -f "$dest")" != "$src" ]]; then
-            ln -sfn "$src" "$dest"
+          # Decide whether we need to (re-)copy. Real file of
+          # matching size == up to date. Symlink, missing file,
+          # or size mismatch == needs copy.
+          need_copy=0
+          if [[ ! -e "$dest" ]]; then
+            need_copy=1
+          elif [[ -L "$dest" ]]; then
+            rm -f "$dest"
+            need_copy=1
+          else
+            src_size=$(stat -c%s "$src" 2>/dev/null || echo 0)
+            dst_size=$(stat -c%s "$dest" 2>/dev/null || echo 0)
+            if [[ "$src_size" != "$dst_size" ]] || [[ "$src_size" -eq 0 ]]; then
+              need_copy=1
+            fi
           fi
-          chown -h hermes:hermes "$dest"
-          # -h: chmod the symlink, not the read-only store target.
-          chmod -h 0755 "$dest"
+          if [[ "$need_copy" -eq 1 ]]; then
+            cp -f "$src" "$dest"
+          fi
+          chown hermes:hermes "$dest"
+          # Plain chmod (no -h): dest is a real file now, not a
+          # symlink, so chmod mutates the file itself.
+          chmod 0755 "$dest"
         done
 
         echo "aphrodite-plugin: $PLUGIN_DIR/ (real, hermes:hermes 0750)"
         echo "aphrodite-plugin:   -> $PLUGIN_SRC (plugin files)"
         echo "aphrodite-plugin: $BIN_DIR/aphrodite -> $PROXY_BIN"
         echo "aphrodite-plugin: $BIN_DIR/libaphrodite_hermes.so -> $PROXY_DYLIB"
+
+        # ────────────────────────────────────────────────────────
+        # Aphrodite proxy config (aphrodite.toml).
+        #
+        # The proxy binary reads this from:
+        #   $APHRODITE_CONFIG_PATH (if set), else
+        #   ./aphrodite.toml, else ~/.hermes/aphrodite/aphrodite.toml
+        # Priority: env var > TOML > hardcoded default.
+        #
+        # We write to the second default path. The plugin's
+        # _start_proxy() does `subprocess.Popen([binary],
+        # env=os.environ.copy())` — the proxy inherits hermes-agent's
+        # env. We don't bake APHRODITE_API_KEY into the systemd unit
+        # env (avoid leaking it via /proc/<pid>/environ), but the
+        # TOML is on disk anyway with mode 0640 owner hermes — the
+        # API key is in /run/secrets/hermes/env (mode 0400 hermes)
+        # to start with, so on-disk TOML is no worse.
+        #
+        # The proxy resolves ~ via its own getpwuid()->pw_dir. The
+        # systemd unit sets HOME=/var/lib/hermes for hermes-agent,
+        # so the on-disk path the proxy opens is
+        # /var/lib/hermes/.hermes/aphrodite/aphrodite.toml.
+        #
+        # api_url is the upstream MiniMax endpoint (NOT
+        # api.minimaxi.com — that's a parking page).
+        #
+        # Two proxies per the Aphrodite README: `cache` on :9797
+        # (in-memory CCR, ephemeral) and `token` on :9798 (SQLite,
+        # persistent). Hermes routes via :9798.
+        # ────────────────────────────────────────────────────────
+        APHRODITE_CONFIG_DIR=/var/lib/hermes/.hermes/aphrodite
+        APHRODITE_CONFIG=$APHRODITE_CONFIG_DIR/aphrodite.toml
+
+        if [[ ! -d "$APHRODITE_CONFIG_DIR" ]]; then
+          mkdir -p "$APHRODITE_CONFIG_DIR"
+        fi
+        chown hermes:hermes "$APHRODITE_CONFIG_DIR"
+        chmod 0750 "$APHRODITE_CONFIG_DIR"
+
+        # Read MINIMAX_API_KEY from the sops-rendered secret.
+        # The activation script runs as root (NixOS's bash wrapper
+        # around ExecStartPre/activationScripts), so the file at
+        # /run/secrets/hermes/env (mode 0400 owner hermes) is
+        # readable thanks to root bypass. After rendering, the
+        # resulting TOML is mode 0640 owner hermes:hermes — only
+        # hermes can read it, which is fine because the proxy
+        # runs as hermes.
+        KEY_FILE=/run/secrets/hermes/env
+        if [[ ! -f "$KEY_FILE" ]]; then
+          echo "aphrodite-plugin: WARNING: $KEY_FILE not found, " >&2
+          echo "aphrodite-plugin: proxy will fail with 'no API key configured'" >&2
+        else
+          API_KEY=$(grep '^MINIMAX_API_KEY=' "$KEY_FILE" | head -1 | cut -d= -f2-)
+          if [[ -z "$API_KEY" ]]; then
+            echo "aphrodite-plugin: WARNING: MINIMAX_API_KEY empty in $KEY_FILE" >&2
+          else
+            cat > "$APHRODITE_CONFIG" <<TOML_EOF
+        # Generated by hosts/aleroza-pc/hermes/aphrodite.nix — do not edit.
+        # Re-run switch to regenerate after sops secret rotation.
+
+        [[proxies]]
+        name = "cache"
+        listen = "127.0.0.1:9797"
+        mode = "cache"
+        tool_relay = true
+        timeout = 120
+
+        [[proxies]]
+        name = "token"
+        listen = "127.0.0.1:9798"
+        mode = "token"
+        tool_relay = true
+        timeout = 300
+
+        [defaults]
+        api_url = "https://api.minimax.io"
+        model = "MiniMax-M3"
+        api_key = "$API_KEY"
+        ccr_ttl_seconds = 3600
+
+        [compression]
+        engine_threshold_pct = 55
+        engine_protect_first = 2
+        engine_protect_last = 5
+        engine_min_msgs = 16
+        tool_threshold_token = 512
+        tool_threshold_cache = 4096
+        terminal_threshold = 1024
+        inline_threshold = 2048
+        auto_expand = false
+        auto_expand_limit = 0
+        catalog_mode = "tool"
+        classifier_poll = true
+        code_multiplier = 3.0
+        context_engine = true
+        prefetch = true
+
+        [previews]
+        model_family = "code_first"
+        code_structure_map = true
+        preview_max_chars = 120
+
+        [prompts]
+        retrieve_guidance = "verbose"
+        ccr_marker_hint = true
+        catalog_intent_hints = true
+        TOML_EOF
+            chown hermes:hermes "$APHRODITE_CONFIG"
+            chmod 0640 "$APHRODITE_CONFIG"
+            echo "aphrodite-plugin: $APHRODITE_CONFIG (mode 0640 hermes:hermes)"
+          fi
+        fi
       '';
     };
 
