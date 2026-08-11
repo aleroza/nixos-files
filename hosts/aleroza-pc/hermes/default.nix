@@ -210,6 +210,12 @@
       enabled = true;
       provider = "groq";
       groq.api_key_env = "GROQ_API_KEY";
+      # Pin the transcription language to Russian. Without this hint,
+      # Groq's whisper-large-v3 sometimes "drifts" to English on short
+      # voice notes (a known whisper behaviour) and the user sees an
+      # English transcript of Russian speech. Resolution order in
+      # hermes-cli: stt.<provider>.language → stt.language → env.
+      language = "ru";
     };
 
     # Fix "ModuleNotFoundError: No module named 'hermes_state_common'"
