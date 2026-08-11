@@ -218,65 +218,30 @@
       language = "ru";
     };
 
-    # ▸ MCP servers (stdio transport).
-    #    Hermes spawns these as child processes per-tool-call.
-    #    Lifecycle = tool-call lifecycle; no long-running service.
+    # ▸ MCP servers (HTTP transport for persistent oci-containers).
+    #    Hermes connects to running services over loopback HTTP. No
+    #    stdio spawn — the services manage their own lifecycle.
     #
     #    Scrapling (D4Vinci/Scrapling) — adaptive web-fetch with
     #    built-in anti-bot bypass (Cloudflare Turnstile, fingerprint
-    #    spoofing). Runs as `mcp` stdio server inside the
-    #    pyd4vinci/scrapling image (matches the upstream Docker
-    #    example in Scrapling's docs).
+    #    spoofing). Runs as a persistent oci-container with
+    #    Streamable-HTTP MCP transport on 127.0.0.1:9876
+    #    (managed by modules/services/scrapling.nix). 10 MCP tools:
+    #    get, bulk_get, fetch, bulk_fetch, stealthy_fetch,
+    #    bulk_stealthy_fetch, screenshot, open_session, close_session,
+    #    list_sessions.
     #
-    #    `--network host` makes the container share the host's
-    #    network stack — chromium inside the container exits on
-    #    the same egress IP as the host, useful for sites that
-    #    pin by source IP.
-    #
-    #    `-e HTTP_PROXY/HTTPS_PROXY/NO_PROXY` (without `=value`)
-    #    propagates the parent's env into the container, so
-    #    curl_cffi and Playwright inside route through the same
-    #    flclash/VPN proxy at 127.0.0.1:7890 as everything else
-    #    on the host.
+    #    Loopback-only because:
+    #    - Chromium inside the container exits on the host's egress
+    #      IP via --network=host (useful for sites that pin by source IP).
+    #    - The container's HTTP endpoint binds to 127.0.0.1:9876 in
+    #      the host's network namespace, so no port forwarding needed.
+    #    - The auth token is set on the container via
+    #      SCRAPLING_MCP_AUTH_TOKEN_FILE (see modules/services/scrapling.nix).
     settings.mcp_servers.scrapling = {
-      # Full path to docker. hermes-agent runs as the `hermes` user via
-      # systemd with a fixed PATH (hermes-agent + coreutils + bash), which
-      # doesn't include ~/.local/state/nix/profiles/profile/bin where
-      # docker is NOT actually installed on this host. mcp_tool spawns
-      # the command via subprocess.Popen without a shell, so the bare
-      # name `docker` resolved through $PATH and fails with
-      # FileNotFoundError. Real docker binary is at
-      # /run/current-system/sw/bin/docker (NixOS system closure,
-      # enabled via virtualisation.docker.enable = true). Hardcoding
-      # that path sidesteps the PATH issue.
-      command = "/run/current-system/sw/bin/docker";
-      # Chromium path is resolved at evaluation time via pkgs.chromium,
-      # so the closure's hash determines the actual path (stable across
-      # rebuilds until chromium itself updates).
-      #
-      # We bind-mount the host's chromium binary into the container at
-      # /chromium (single-file mount: -v src:dst:ro), and pass that
-      # path to `scrapling mcp --executable-path /chromium`. This way:
-      # - The browser-based MCP tools (fetch, stealthy_fetch, screenshot,
-      #   open_session) find a working chromium at runtime.
-      # - No Dockerfile prebake (no need to maintain a custom image).
-      # - No persistent container (one `docker run --rm` per tool call).
-      # - No nix-store pass-through (just one binary file mount).
-      args = [
-        "run" "-i" "--rm"
-        "--network" "host"
-        "-e" "HTTP_PROXY"
-        "-e" "HTTPS_PROXY"
-        "-e" "NO_PROXY"
-        "-v" "${pkgs.chromium}/bin/chromium:/chromium:ro"
-        "pyd4vinci/scrapling:latest"
-        "mcp"
-        "--executable-path" "/chromium"
-      ];
-      env = {
-        HTTP_PROXY = "http://127.0.0.1:7890";
-        HTTPS_PROXY = "http://127.0.0.1:7890";
-        NO_PROXY = "127.0.0.1,localhost,::1";
+      url = "http://127.0.0.1:9876/mcp";
+      headers = {
+        Authorization = "Bearer scrapling-mcp";
       };
       # MCP servers default to a short connect timeout. Scrapling
       # cold-starts a chromium browser on first tool call, which

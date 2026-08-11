@@ -82,6 +82,13 @@
     # VLM still routes through Google via the host proxy.
     openviking.enable = true;
 
+    # Scrapling MCP — persistent oci-container with Streamable-HTTP
+    # transport. Persistent state at /var/lib/scrapling on the host.
+    # See modules/services/scrapling.nix. Hermes connects via
+    # settings.mcp_servers.scrapling (HTTP transport) in
+    # hosts/aleroza-pc/hermes/default.nix.
+    scrapling.enable = true;
+
     # xserver.enable = true; @ Wayland in gnome
     gnome = {
       enable = true;
