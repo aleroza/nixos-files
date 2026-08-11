@@ -21,6 +21,7 @@
     ./docker.nix
     ./network-capture.nix
     ./services/openviking.nix
+    ./services/scrapling.nix
     ./nix-rebuild-meta.nix
   ];
 }
