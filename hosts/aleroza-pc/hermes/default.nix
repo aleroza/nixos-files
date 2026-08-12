@@ -146,7 +146,11 @@
     # ownership. The gateway picks up plugins from ~/.hermes/
     # plugins/ at startup automatically; no settings.plugins.*
     # wiring needed here (that's the path for non-NixOS installs).
-    settings.approvals.smartPolicy = ''
+    # v0.20.0 renamed smartPolicy -> smart_policy. The camelCase form
+    # (set through the NixOS module until the rename) is silently
+    # ignored by the new schema, so the guardian would never escalate
+    # writes to the NixOS switch trigger pair. Switched to snake_case.
+    settings.approvals.smart_policy = ''
       ESCALATE any command whose argument list, after shell
       deobfuscation (quotes, escapes, $() substitution, backslash
       continuations), references either of these two absolute
@@ -172,6 +176,17 @@
       push, nix build, nix flake check, dry-run, jq, grep, etc.)
       is reversible without sudo and continues to auto-approve.
     '';
+
+    # Compression tuning for v0.20.0 (Herald). The large-window model
+    # M3 (256K) means threshold (~50%, ~128K) rarely fires, so bulky
+    # tool-output rides in history and gets re-sent every turn.
+    # Proactive prune reclaims it early; min_tail_user_messages=3
+    # keeps the last 3 real user turns verbatim when tool output
+    # fills the tail token budget (the default 1 keeps only the
+    # last). Both are opt-in upstreams but worth the cache-break
+    # cost on this host.
+    settings.compression.min_tail_user_messages = 3;
+    settings.compression.proactive_prune_tokens = 48000;
 
     # Memory provider: OpenViking. The plugin in upstream
     # hermes-agent reads OPENVIKING_* env from environmentFiles +
