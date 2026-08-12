@@ -126,18 +126,13 @@
     # against the providers.* map below. Switching the upstream
     # model name in one place (services.aphrodite.defaultModel)
     # propagates here.
-    settings.model = "aphrodite-token/minimax/MiniMax-M3";
-    settings.providers.aphrodite-token = {
-      provider = "openai";
-      base_url = "http://127.0.0.1:9798";
-      api_key_env = "MINIMAX_API_KEY";
-      max_tokens = 65536;
-    };
+    settings.model = "minimax/MiniMax-M3";
+
     # Sub-agents inherit delegation.model from settings; primary
     # session keeps settings.model above. Aphrodite proxies the
     # M2.7 model through the same upstream (api_url+api_key), so
     # it routes via the same provider.
-    settings.delegation.model = "aphrodite-token/minimax/MiniMax-M2.7";
+    settings.delegation.model = "minimax/MiniMax-M2.7";
     settings.toolsets = [ "all" ];
 
     # Plugin enablement is handled by the activation script in
@@ -239,9 +234,26 @@
     #    - The auth token is set on the container via
     #      SCRAPLING_MCP_AUTH_TOKEN_FILE (see modules/services/scrapling.nix).
     settings.mcp_servers.scrapling = {
-      url = "http://127.0.0.1:9876/mcp";
-      headers = {
-        Authorization = "Bearer scrapling-mcp";
+      command = "docker";
+      args = [
+        "run"
+        "-i"
+        "--rm"
+        "--network"
+        "host"
+        "-e"
+        "HTTP_PROXY"
+        "-e"
+        "HTTPS_PROXY"
+        "-e"
+        "NO_PROXY"
+        "pyd4vinci/scrapling:latest"
+        "mcp"
+      ];
+      env = {
+        HTTP_PROXY = "http://127.0.0.1:7890";
+        HTTPS_PROXY = "http://127.0.0.1:7890";
+        NO_PROXY = "127.0.0.1,localhost,::1";
       };
       # MCP servers default to a short connect timeout. Scrapling
       # cold-starts a chromium browser on first tool call, which
