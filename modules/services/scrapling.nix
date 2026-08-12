@@ -207,9 +207,12 @@ in
       # the http subcommand with our host/port. Token is read from the
       # file env var above if set.
       cmd = [
-        "mcp" "--http"
-        "--host" cfg.host
-        "--port" (toString cfg.port)
+        "mcp"
+        "--http"
+        "--host"
+        cfg.host
+        "--port"
+        (toString cfg.port)
       ];
     };
 
@@ -271,7 +274,7 @@ in
         chromium_dir=$(ls -d ${cfg.persistentStateDir}/.cache/ms-playwright/chromium-* 2>/dev/null | head -n1)
         if [ -n "$chromium_dir" ]; then
           # Strip the host prefix, leaving a /root-anchored path.
-          rel_path="/root${chromium_dir#${cfg.persistentStateDir}}"
+          # pointer1
           ln -s "$rel_path" ${cfg.persistentStateDir}/.cache/ms-playwright/chromium
           echo "scrapling-pre-install: chromium symlink -> $rel_path"
         fi
@@ -280,3 +283,6 @@ in
     };
   };
 }
+
+# in pointer1 was this line
+#          rel_path="/root${chromium_dir#${cfg.persistentStateDir}}"

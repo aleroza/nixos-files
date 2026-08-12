@@ -87,7 +87,7 @@
     # See modules/services/scrapling.nix. Hermes connects via
     # settings.mcp_servers.scrapling (HTTP transport) in
     # hosts/aleroza-pc/hermes/default.nix.
-    scrapling.enable = true;
+    scrapling.enable = false;
 
     # xserver.enable = true; @ Wayland in gnome
     gnome = {
