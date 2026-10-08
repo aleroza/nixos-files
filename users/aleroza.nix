@@ -161,6 +161,19 @@
     '';
   };
 
+  # ── Nautilus context-menu: "Open as Root" ─────────────────────────
+  # Nautilus refuses to run as root directly — it must be invoked
+  # under the user's session and reach root files via the `admin://`
+  # GVFS scheme, which prompts through polkit internally. Works on
+  # both X11 and Wayland without env passthrough tricks.
+  home.file.".local/share/nautilus/scripts/open-as-root" = {
+    executable = true;
+    text = ''
+      #!/bin/sh
+      exec nautilus "admin://''${NAUTILUS_SCRIPT_CURRENT_URI#file://}"
+    '';
+  };
+
   # ── Deluge daemon (per-user systemd unit) ────────────────────────
   # Runs as a background daemon the user owns. deluge-gtk / deluge-console
   # connect to 127.0.0.1:58846 with the `localclient` account defined in

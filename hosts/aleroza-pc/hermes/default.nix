@@ -207,6 +207,7 @@
         provider = "anthropic";
       };
     };
+    settings.memory.write_approval = "always";
     settings.memory.provider = "openviking";
     settings.context.engine = "aphrodite";
     settings.context.engine_threshold_pct = 55;
@@ -256,11 +257,17 @@
     settings.mcp_servers.scrapling = {
       command = "docker";
       args = [
-        "run" "-i" "--rm"
-        "--network" "host"
-        "-e" "HTTP_PROXY"
-        "-e" "HTTPS_PROXY"
-        "-e" "NO_PROXY"
+        "run"
+        "-i"
+        "--rm"
+        "--network"
+        "host"
+        "-e"
+        "HTTP_PROXY"
+        "-e"
+        "HTTPS_PROXY"
+        "-e"
+        "NO_PROXY"
         "pyd4vinci/scrapling:latest"
         "mcp"
       ];
@@ -489,6 +496,14 @@
       cp ${./BOOT.md} /var/lib/hermes/.hermes/BOOT.md
       chmod 0640 /var/lib/hermes/.hermes/BOOT.md
       chown hermes:hermes /var/lib/hermes/.hermes/BOOT.md
+
+      # Drop the managed SOUL.md (system prompt overlay) into
+      # HERMES_HOME. Source-of-truth is ./SOUL.md in this repo,
+      # so edits land on next activation. Mode matches BOOT.md
+      # so the hermes user can read it but the world cannot.
+      cp ${./SOUL.md} /var/lib/hermes/.hermes/SOUL.md
+      chmod 0640 /var/lib/hermes/.hermes/SOUL.md
+      chown hermes:hermes /var/lib/hermes/.hermes/SOUL.md
     '';
     deps = [ "hermes-agent-setup" ];
   };

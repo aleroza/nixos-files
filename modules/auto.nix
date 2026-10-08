@@ -21,6 +21,11 @@ in
         default = false;
         description = "Enable Python.";
       };
+      uv = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable uv (Astral Python package/project manager).";
+      };
       networkCapture = {
         enable = mkOption {
           type = types.bool;
@@ -241,6 +246,17 @@ in
       type = types.bool;
       default = false;
       description = "Enable Flatpak (flathub) support.";
+    };
+
+    # ▸ Removable media (cameras, phones over MTP/PTP)
+    removableMedia = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Enable GVFS + libmtp + libgphoto2 so file managers (Nautilus,
+        Dolphin, Thunar) can browse cameras and phones as MTP/PTP
+        devices, and darktable/rawtherapee can do tethered capture.
+      '';
     };
 
     # ▸ SSH server

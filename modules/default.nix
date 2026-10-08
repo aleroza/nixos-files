@@ -11,6 +11,7 @@
     ./security/fail2ban.nix
     ./security/sops.nix
     ./flatpak.nix
+    ./removable-media.nix
     ./xserver.nix
     ./gnome
     ./kde.nix

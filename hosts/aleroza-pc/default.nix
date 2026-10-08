@@ -39,6 +39,7 @@
       enable = true;
       nodejs = true;
       python = true;
+      uv = true;
       networkCapture = {
         enable = true;
         users = [
@@ -96,6 +97,7 @@
     };
 
     flatpak = true;
+    removableMedia = true;
 
     docker = {
       enable = true;
@@ -122,13 +124,6 @@
     hmUsers = [
       "aleroza"
       "openclaw"
-    ];
-  };
-
-  services.flatpak = {
-    enable = true;
-    packages = [
-      "f3-gui.flatpakref"
     ];
   };
 
@@ -297,6 +292,7 @@
     telegram-desktop
     onlyoffice-desktopeditors
     filezilla
+    transmission_4-gtk
 
     prismlauncher
     spotify
@@ -306,6 +302,7 @@
     dosfstools
     darktable
     exiftool
+
   ];
 
   # ▸ Монитор (раскладка двух экранов, host-specific) ───────────────

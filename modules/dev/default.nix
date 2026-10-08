@@ -13,12 +13,14 @@ in
   imports = [
     ./nodejs.nix
     ./python.nix
+    ./uv.nix
   ];
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages = with pkgs; [
       git
       vim
+      gnumake
       bind
 
       tldr
