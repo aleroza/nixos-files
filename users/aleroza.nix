@@ -153,7 +153,9 @@
       Type=Application
       Name=FlClash
       Comment=FlClash startup script
-      Exec=${nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.flclash}/app/flclash/FlClash
+      Exec=${
+        nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.flclash
+      }/app/flclash/FlClash
       StartupNotify=false
       Terminal=false
     '';
@@ -174,6 +176,8 @@
       Restart = "on-failure";
       RestartSec = 5;
     };
-    Install = { WantedBy = [ "default.target" ]; };
+    Install = {
+      WantedBy = [ "default.target" ];
+    };
   };
 }

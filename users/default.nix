@@ -10,6 +10,7 @@ in
     extraSpecialArgs = {
       nix-flatpak = nix-flatpak;
       auto = config.auto;
+      hostName = config.networking.hostName;
       nixpkgs-unstable = nixpkgs-unstable;
     };
     users = lib.genAttrs hmUsers (name: import ./${name}.nix);

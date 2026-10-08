@@ -76,6 +76,9 @@
     desktop = true;
     laptop = true;
 
+    wireplumber.amplifyAlsaSinks = true;
+    wireplumber.amplifyVolume = 0.5;
+
     # OpenViking self-hosted context database. Bound to 127.0.0.1
     # only (container network=host + OPENVIKING_SERVER_HOST=127.0.0.1).
     # Embedding goes through local Ollama (services.ollama below);
@@ -119,6 +122,13 @@
     hmUsers = [
       "aleroza"
       "openclaw"
+    ];
+  };
+
+  services.flatpak = {
+    enable = true;
+    packages = [
+      "f3-gui.flatpakref"
     ];
   };
 
@@ -289,6 +299,7 @@
     filezilla
 
     prismlauncher
+    spotify
 
     ntfs3g
     exfat
