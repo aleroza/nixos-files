@@ -392,7 +392,7 @@ in
         engine_protect_first = 2
         engine_protect_last = 5
         engine_min_msgs = 16
-        tool_threshold_token = 512
+        tool_threshold_token = 384
         tool_threshold_cache = 4096
         terminal_threshold = 1024
         inline_threshold = 2048
@@ -407,7 +407,7 @@ in
         [previews]
         model_family = "code_first"
         code_structure_map = true
-        preview_max_chars = 120
+        preview_max_chars = 240
 
         [prompts]
         retrieve_guidance = "verbose"
