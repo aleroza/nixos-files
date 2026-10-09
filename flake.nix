@@ -48,53 +48,37 @@
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
 
-      # Overlay: bump hermes-agent with the OpenViking plugin's Python
-      # deps. extraPythonPackages is a derivation-FUNCTION parameter
-      # (upstream nix/hermes-agent.nix:208), so .override here must
-      # happen BEFORE host code reads pkgs.hermes-agent. Applying it
-      # via nixpkgs.overlays guarantees every consumer in the closure
-      # (services.hermes-agent.package, addToSystemPackages, etc.) sees
-      # the same .override()'d derivation.
+      # The openvikingOverlay must be applied through `nixpkgs.overlays`
+      # on the nixosSystem level (NOT through specialArgs.pkgs*), because
+      # `services.hermes-agent.package` reads `packages.<system>.default`
+      # directly from the flake-input and only sees overlays attached
+      # to nixpkgs.legacyPackages via nixpkgs.overlays.
       #
-      # Version-stable ABI selection: hermes-agent upstream moves
-      # between python3.11/3.12/3.13/3.14 across releases. The
-      # `python.pkgs.requiredPythonModules` walker inside upstream
-      # (nix/hermes-agent.nix:208) needs ABI-matched wheels, so the
-      # overlay introspects the actual python version of the
-      # hermes-agent build and picks the matching nixpkgs Python
-      # package set (`python311Packages`, `python312Packages`, etc.).
-      # On a release where upstream bumps python, this overlay
-      # automatically follows — no manual edit required.
-      #
-      # httpx propagates httpcore + h11 + anyio + sniffio + idna +
-      # certifi through requiredPythonModules.
+      # We also pull in hermes-agent's own `overlays.default` upstream
+      # exposes for `extraPythonPackages` overrides (per
+      # https://hermes-agent.nousresearch.com/docs/getting-started/
+      # nix-setup — "Using the Overlay").
       openvikingOverlay = final: prev:
         let
           basePkg = prev.hermes-agent or null;
-          pyVersion = basePkg.python.version or "3.12";
-          # nixpkgs names its Python sets `python311Packages`,
-          # `python312Packages`, ... keyed by major.minor. Resolve
-          # the right attribute and fall back to `python3Packages`
-          # (which always tracks the latest Python) only when the
-          # explicit version is missing in this nixpkgs — better to
-          # log loudly than silently ABI-mismatch.
-          majorMinor = builtins.replaceStrings [ "." ] [ "" ]
-            (builtins.substring 0 3 pyVersion);
-          pyAttr = "python${majorMinor}Packages";
-          pySet = final.${pyAttr} or final.python3Packages or null;
+          pyVersion = if basePkg != null then basePkg.python.version or "3.12" else null;
+          majorMinor =
+            if pyVersion != null
+            then builtins.replaceStrings [ "." ] [ "" ]
+              (builtins.substring 0 3 pyVersion)
+            else null;
+          pyAttr = if majorMinor != null then "python${majorMinor}Packages" else null;
+          pySet = if pyAttr != null then final.${pyAttr} or final.python3Packages or null else null;
         in
-        if basePkg == null then null
+        if basePkg == null then {}
         else if pySet == null || !(pySet ? httpx) then
-          # Hard failure is better than silent ABI mismatch.
           throw "openviking-overlay: hermes-agent uses python${pyVersion}, "
-            + "but nixpkgs has no ${pyAttr}.httpx. "
-            + "Either bump nixpkgs, or set EXTRA_PYTHON_OVERRIDE_HTTPX_PATH "
-            + "in flake.nix to a python-matched httpx derivation."
-        else basePkg.override {
-          extraPythonPackages = [ pySet.httpx ];
+            + "but nixpkgs has no ${pyAttr}.httpx."
+        else {
+          hermes-agent = basePkg.override {
+            extraPythonPackages = [ pySet.httpx ];
+          };
         };
-      pkgsWithOverlay = pkgs.appendOverlays [ openvikingOverlay ];
-
       # See modules/revision.nix for the env vars these fields come from.
       gitMeta = let
         envRev = builtins.getEnv "NIXOS_GIT_REVISION";
@@ -108,15 +92,29 @@
         dirty = (builtins.getEnv "NIXOS_GIT_DIRTY") == "1";
         url = builtins.getEnv "NIXOS_GIT_URL";
       };
-
       mkHost =
         hostName:
         nixpkgs.lib.nixosSystem {
           inherit system;
           specialArgs = {
-            inherit self gitMeta nix-flatpak nixpkgs-unstable hermes-agent pkgsWithOverlay;
+            inherit self gitMeta nix-flatpak nixpkgs-unstable hermes-agent;
           };
           modules = [
+            # Nixpkgs overlays — applied to every nixpkgs.legacyPackages
+            # in the system closure. `services.hermes-agent.package`
+            # reads hermes-agent through this overlay, so the
+            # extraPythonPackages override takes effect here.
+            #
+            # We do NOT include hermes-agent.overlays.default here —
+            # it self-applies via `inputs.self.packages.<sys>.default`
+            # and creates infinite recursion when read from a
+            # consumer flake. Our openvikingOverlay uses
+            # `prev.hermes-agent` directly (the flake-input already
+            # resolves to packages.default at flake-exports, before
+            # any consumer overlay runs), so it doesn't loop.
+            ({ ... }: {
+              nixpkgs.overlays = [ openvikingOverlay ];
+            })
             ./modules/auto.nix
             ./hosts/${hostName}/default.nix
             ./modules/default.nix
