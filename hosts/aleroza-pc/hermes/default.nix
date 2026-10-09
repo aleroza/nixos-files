@@ -35,6 +35,7 @@
 {
   imports = [
     ./aphrodite.nix
+    ./openviking.nix
   ];
 
   # ▸ 1. Hermes system user (created by hermes-agent NixOS module).
@@ -106,6 +107,10 @@
       OPENVIKING_ENDPOINT = "http://127.0.0.1:1933";
       OPENVIKING_ACCOUNT = "default";
       OPENVIKING_USER = "default";
+      # Peer ID for OpenViking's viking:// namespace scoping. Default is
+      # 'hermes' upstream; pin it here so the plugin's vendored peers/
+      # directory matches across rebuilds.
+      OPENVIKING_AGENT = "hermes";
 
       # Opt-in flag for the Aphrodite plugin's context-engine
       # registration. The plugin's on_session_start hook only
@@ -284,11 +289,22 @@
     };
 
     # Fix "ModuleNotFoundError: No module named 'hermes_state_common'"
+    # + add httpx for the OpenViking memory plugin
+    # (hosts/aleroza-pc/hermes/openviking.nix vendors the plugin source
+    # tree into ~/.hermes/plugins/openviking/; the plugin imports httpx
+    # at module load time, and Nix-store hermes-agent does not ship it).
     package =
       let
         basePkg = hermes-agent.packages.x86_64-linux.default;
         pythonSrc = basePkg.hermesNpmLib.pythonSrc;
         venv = basePkg.hermesVenv;
+        # Copy httpx's site-packages entries into the override's local
+        # site-packages. ${pkgs.httpx}/lib/python3.12/site-packages/
+        # contains httpx + httpcore + h11 + anyio + sniffio + idna +
+        # certifi — all of httpx's transitive closure. cp -r preserves
+        # the .dist-info/ directories uv/Python use to find versions
+        # and entry points.
+        httpxSitePkgs = "${pkgs.httpx}/lib/python3.12/site-packages";
       in
       basePkg.overrideAttrs (old: {
         postInstall = (old.postInstall or "") + ''
@@ -298,6 +314,12 @@
               cp -f "${pythonSrc}/$mod.py" "$out/lib/python3.12/site-packages/$mod.py"
             fi
           done
+          # OpenViking plugin runtime dependency. Copy httpx's whole
+          # site-packages (httpx + transitive deps) so import works
+          # without rewriting the upstream hermes-agent venv.
+          if [ -d "${httpxSitePkgs}" ]; then
+            cp -rn ${httpxSitePkgs}/* $out/lib/python3.12/site-packages/ 2>/dev/null || true
+          fi
           # Re-wrap each hermes entry-point to inject the patched site-packages
           # on PYTHONPATH, so Python finds our copies before the wheel's.
           for bin in hermes hermes-agent hermes-acp; do
