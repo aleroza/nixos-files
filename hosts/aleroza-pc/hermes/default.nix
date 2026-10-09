@@ -298,7 +298,6 @@
       let
         basePkg = hermes-agent.packages.x86_64-linux.default;
         pythonSrc = basePkg.hermesNpmLib.pythonSrc;
-        venv = basePkg.hermesVenv;
       in
       basePkg.overrideAttrs (old: {
         postInstall = (old.postInstall or "") + ''

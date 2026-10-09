@@ -50,6 +50,7 @@
       },
       "original": {
         "owner": "NousResearch",
+        "ref": "v0.21.6",
         "repo": "hermes-agent",
         "type": "github"
       }
