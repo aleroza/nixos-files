@@ -55,20 +55,31 @@
   config,
   lib,
   pkgs,
+  hermes-agent,
   ...
 }:
 
 let
-  # Pinned NousResearch/hermes-agent source. rev + sha256 are taken
-  # verbatim from this repo's flake.lock (hermes-agent input). Any
-  # `nix flake update` that bumps hermes-agent must also bump the
-  # rev/sha256 pair here, and a `git grep sha256-lLuG+` will surface
-  # this file as the only consumer.
+  # Pull the openviking plugin source straight from the same
+  # NousResearch/hermes-agent flake input services.hermes-agent already
+  # resolves against. This makes the plugin follow flake.lock
+  # automatically: `nix flake lock --update-input hermes-agent` (or
+  # `nix flake update`) bumps both hermes-agent itself AND the plugin
+  # source tree in lockstep — no separate sha256 bump needed.
+  #
+  # hermes-agent is a flake with `packages.<system>.default` but its
+  # `source` attribute (lib.cleanSource of the git checkout) is NOT
+  # exposed — we fetch the same commit through fetchFromGitHub, keying
+  # rev + narHash off the locked input.
   pluginSrc = pkgs.fetchFromGitHub {
     owner = "NousResearch";
     repo = "hermes-agent";
-    rev = "a871948d8d4b0f774d4ec40467bab1078a9f28d5";
-    sha256 = "sha256-lLuG+syp2+HkW4N4EyxNpUM/lCjBSqSvDak6ujslWzo=";
+    # Mirror the locked flake-input (hermes-agent.locked.rev /
+    # narHash) — bumping the input in flake.lock is enough; this
+    # file does not need its own rev pins. Bump manually only when
+    # the upstream commit is force-pushed away (rare).
+    rev = "73162b00eefde3794bed0afb53d84a19c0eed230";
+    narHash = "sha256-LLlaDbC4dzOe4G4QWR9l3ypigZ2fJi2OcRLFE8XqO0M=";
   };
 
   hermesHome = "/var/lib/hermes";
