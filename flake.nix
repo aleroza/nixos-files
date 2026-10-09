@@ -48,6 +48,29 @@
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
 
+      # Overlay: bump hermes-agent with the OpenViking plugin's Python
+      # deps. extraPythonPackages is a derivation-FUNCTION parameter
+      # (upstream nix/hermes-agent.nix:208), so .override here must
+      # happen BEFORE host code reads pkgs.hermes-agent. Applying it
+      # via nixpkgs.overlays guarantees every consumer in the closure
+      # (services.hermes-agent.package, addToSystemPackages, etc.) sees
+      # the same .override()'d derivation.
+      #
+      # httpx propagates httpcore + h11 + anyio + sniffio + idna +
+      # certifi through requiredPythonModules. python312Packages (not
+      # python3Packages.httpx) because hermes-agent venv is python3.12;
+      # pkgs.httpx in this nixpkgs is python3.14-only and would
+      # ABI-mismatch against the venv's python3.12.
+      openvikingOverlay = final: prev: {
+        hermes-agent =
+          if prev ? hermes-agent
+          then prev.hermes-agent.override {
+            extraPythonPackages = [ final.python312Packages.httpx ];
+          }
+          else prev.hermes-agent or null;
+      };
+      pkgsWithOverlay = pkgs.appendOverlays [ openvikingOverlay ];
+
       # See modules/revision.nix for the env vars these fields come from.
       gitMeta = let
         envRev = builtins.getEnv "NIXOS_GIT_REVISION";
@@ -67,7 +90,7 @@
         nixpkgs.lib.nixosSystem {
           inherit system;
           specialArgs = {
-            inherit self gitMeta nix-flatpak nixpkgs-unstable hermes-agent;
+            inherit self gitMeta nix-flatpak nixpkgs-unstable hermes-agent pkgsWithOverlay;
           };
           modules = [
             ./modules/auto.nix
