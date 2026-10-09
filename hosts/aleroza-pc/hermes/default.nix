@@ -288,25 +288,41 @@
       timeout = 60;
     };
 
-    # Fix "ModuleNotFoundError: No module named 'hermes_state_common'"
-    # + add httpx for the OpenViking memory plugin
-    # (hosts/aleroza-pc/hermes/openviking.nix vendors the plugin source
-    # tree into ~/.hermes/plugins/openviking/; the plugin imports httpx
-    # at module load time, and Nix-store hermes-agent does not ship it).
+    # Patch hermes-agent with two side-effects needed by the OpenViking
+    # memory plugin (hosts/aleroza-pc/hermes/openviking.nix):
+    #
+    #   1. inject hermes_state_*.py copies — workaround for a venv loop
+    #      that misses them at first install
+    #   2. re-wrap entry-points to prepend the patched site-packages on
+    #      PYTHONPATH
+    #
+    # The OpenViking plugin's own dependency httpx is added via the
+    # upstream parameter `extraPythonPackages`. That mechanism walks
+    # propagatedBuildInputs and adds the resulting site-packages to
+    # PYTHONPATH through makeWrapper inside nix/hermes-agent.nix
+    # (~line 208). It is a derivation-FUNCTION parameter, not an
+    # mkDerivation attr, so it cannot be set through overrideAttrs —
+    # we must chain .override { ... } with .overrideAttrs { ... }.
+    #
+    # pkgs.python312Packages.httpx (not pkgs.httpx) because hermes-agent
+    # venv is python3.12; pkgs.httpx in this nixpkgs is python3.14-only
+    # and copying its site-packages across would ABI-mismatch.
     package =
       let
         basePkg = hermes-agent.packages.x86_64-linux.default;
         pythonSrc = basePkg.hermesNpmLib.pythonSrc;
-        venv = basePkg.hermesVenv;
-        # Copy httpx's site-packages entries into the override's local
-        # site-packages. ${pkgs.httpx}/lib/python3.12/site-packages/
-        # contains httpx + httpcore + h11 + anyio + sniffio + idna +
-        # certifi — all of httpx's transitive closure. cp -r preserves
-        # the .dist-info/ directories uv/Python use to find versions
-        # and entry points.
-        httpxSitePkgs = "${pkgs.httpx}/lib/python3.12/site-packages";
       in
-      basePkg.overrideAttrs (old: {
+      basePkg.override {
+        # Upstream parameter — see nix/hermes-agent.nix:
+        #   allExtraPythonPackages = python.pkgs.requiredPythonModules
+        #     extraPythonPackages;
+        #   pythonPath = makeSearchPath sitePackagesPath allExtra...;
+        # makeWrapper adds ${pythonPath} to PYTHONPATH when this is
+        # non-empty. httpx propagates httpcore + h11 + anyio + sniffio +
+        # idna + certifi through requiredPythonModules.
+        extraPythonPackages = [ pkgs.python312Packages.httpx ];
+      }
+      .overrideAttrs (old: {
         postInstall = (old.postInstall or "") + ''
           mkdir -p $out/lib/python3.12/site-packages
           for mod in hermes_state_common hermes_state_portability hermes_state_schema hermes_state_search; do
@@ -314,14 +330,9 @@
               cp -f "${pythonSrc}/$mod.py" "$out/lib/python3.12/site-packages/$mod.py"
             fi
           done
-          # OpenViking plugin runtime dependency. Copy httpx's whole
-          # site-packages (httpx + transitive deps) so import works
-          # without rewriting the upstream hermes-agent venv.
-          if [ -d "${httpxSitePkgs}" ]; then
-            cp -rn ${httpxSitePkgs}/* $out/lib/python3.12/site-packages/ 2>/dev/null || true
-          fi
-          # Re-wrap each hermes entry-point to inject the patched site-packages
-          # on PYTHONPATH, so Python finds our copies before the wheel's.
+          # Re-wrap each hermes entry-point to inject the patched
+          # site-packages on PYTHONPATH, so Python finds our
+          # hermes_state_*.py copies before the wheel's.
           for bin in hermes hermes-agent hermes-acp; do
             if [ -x "$out/bin/$bin" ]; then
               wrapProgram "$out/bin/$bin" \
