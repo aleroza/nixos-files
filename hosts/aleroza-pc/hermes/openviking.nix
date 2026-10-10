@@ -75,11 +75,16 @@ let
     owner = "NousResearch";
     repo = "hermes-agent";
     # Mirror the locked flake-input (hermes-agent.locked.rev /
-    # narHash) — bumping the input in flake.lock is enough; this
-    # file does not need its own rev pins. Bump manually only when
-    # the upstream commit is force-pushed away (rare).
-    rev = "73162b00eefde3794bed0afb53d84a19c0eed230";
-    narHash = "sha256-LLlaDbC4dzOe4G4QWR9l3ypigZ2fJi2OcRLFE8XqO0M=";
+    # hash) — bumping the input in flake.lock is enough; this file
+    # does not need its own rev pins. Bump manually only when the
+    # upstream commit is force-pushed away (rare).
+    rev = "818c13be1dc4fd28987e1e881a9408224afd4535";
+    # nixpkgs 26.05's fetchFromGitHub → fetchzip → fetchurl chain
+    # rejects narHash (added in newer Nix) and routes through extendDrvArgs
+    # that does not strip new args. Use `hash` (SRI) which is accepted by
+    # fetchurl at this nixpkgs revision. The value is the same SRI hash
+    # that nix flake lock --update-input writes as narHash.
+    hash = "sha256-nET4+PalQSZ4xfhdg2Rb5NB40XxINAkSvpUYHf947Io=";
   };
 
   hermesHome = "/var/lib/hermes";
