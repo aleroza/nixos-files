@@ -60,32 +60,34 @@
 }:
 
 let
-  # Pull the openviking plugin source straight from the same
-  # NousResearch/hermes-agent flake input services.hermes-agent already
-  # resolves against. This makes the plugin follow flake.lock
-  # automatically: `nix flake lock --update-input hermes-agent` (or
-  # `nix flake update`) bumps both hermes-agent itself AND the plugin
-  # source tree in lockstep — no separate sha256 bump needed.
+  # OpenViking memory plugin for Hermes Agent.
   #
-  # hermes-agent is a flake with `packages.<system>.default` but its
-  # `source` attribute (lib.cleanSource of the git checkout) is NOT
-  # exposed — we fetch the same commit through fetchFromGitHub, keying
-  # rev + narHash off the locked input.
-  pluginSrc = pkgs.fetchFromGitHub {
-    owner = "NousResearch";
-    repo = "hermes-agent";
-    # Mirror the locked flake-input (hermes-agent.locked.rev /
-    # hash) — bumping the input in flake.lock is enough; this file
-    # does not need its own rev pins. Bump manually only when the
-    # upstream commit is force-pushed away (rare).
-    rev = "818c13be1dc4fd28987e1e881a9408224afd4535";
-    # nixpkgs 26.05's fetchFromGitHub → fetchzip → fetchurl chain
-    # rejects narHash (added in newer Nix) and routes through extendDrvArgs
-    # that does not strip new args. Use `hash` (SRI) which is accepted by
-    # fetchurl at this nixpkgs revision. The value is the same SRI hash
-    # that nix flake lock --update-input writes as narHash.
-    hash = "sha256-nET4+PalQSZ4xfhdg2Rb5NB40XxINAkSvpUYHf947Io=";
-  };
+  # As of hermes-agent commit 05eecbc (2026-10-07, "chore(memory): remove
+  # the bundled openviking provider"), the in-tree plugins/memory/openviking
+  # copy was deleted and replaced with a plugin-catalog entry pointing
+  # at volcengine/OpenViking#examples/hermes-plugin. We vendor from there
+  # (the official upstream) instead.
+  #
+  # Catalog entry (plugin-catalog/openviking.yaml in hermes-agent repo):
+  #   repo:    https://github.com/volcengine/OpenViking
+  #   sha:     3b65218eef43aba7a680cf143278ad4c153b0e9f
+  #   subdir:  examples/hermes-plugin
+  #   version: 2.0.1
+  #
+  # We fetch the full repo, then narrow pluginSrc to examples/hermes-plugin
+  # so the activation script copies __init__.py and plugin.yaml from
+  # that subdir. The activation script is idempotent: it removes any
+  # existing symlink and replaces with a real directory, copies the
+  # Python module from the store, and symlinks the YAML manifest.
+  #
+  # When upstream bumps the catalog pin, edit both rev and hash below.
+  pluginSrc = "${pkgs.fetchFromGitHub {
+    owner = "volcengine";
+    repo = "OpenViking";
+    # Plugin-catalog pin (see upstream hermes-agent/plugin-catalog/openviking.yaml).
+    rev = "3b65218eef43aba7a680cf143278ad4c153b0e9f";
+    hash = "sha256-0wbbh6yh1anh5sc0zp1n11qy2g0846m0mkrnml57lrw2cs9cbz9q";
+  }}/examples/hermes-plugin";
 
   hermesHome = "/var/lib/hermes";
 in
@@ -135,7 +137,7 @@ in
         # parses it for metadata).
         # ────────────────────────────────────────────────────────
         yaml_link="$PLUGIN_DIR/plugin.yaml"
-        yaml_src="$PLUGIN_SRC/plugins/memory/openviking/plugin.yaml"
+        yaml_src="$PLUGIN_SRC/plugin.yaml"
         if [[ ! -L "$yaml_link" ]] || [[ "$(readlink -f "$yaml_link")" != "$yaml_src" ]]; then
           ln -sfn "$yaml_src" "$yaml_link"
         fi
@@ -150,7 +152,7 @@ in
         # wrong-target, or stale (size mismatch with source).
         # ────────────────────────────────────────────────────────
         init_dest="$PLUGIN_DIR/__init__.py"
-        init_src="$PLUGIN_SRC/plugins/memory/openviking/__init__.py"
+        init_src="$PLUGIN_SRC/__init__.py"
         need_copy=0
         if [[ ! -e "$init_dest" ]]; then
           need_copy=1
