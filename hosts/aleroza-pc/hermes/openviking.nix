@@ -86,7 +86,7 @@ let
     repo = "OpenViking";
     # Plugin-catalog pin (see upstream hermes-agent/plugin-catalog/openviking.yaml).
     rev = "3b65218eef43aba7a680cf143278ad4c153b0e9f";
-    hash = "sha256-0wbbh6yh1anh5sc0zp1n11qy2g0846m0mkrnml57lrw2cs9cbz9q";
+    sha256 = "38fdc5926682677a0aad36cf0aaa21083ce1710836dc0f982ed0aa00bd816b71";
   }}/examples/hermes-plugin";
 
   hermesHome = "/var/lib/hermes";
