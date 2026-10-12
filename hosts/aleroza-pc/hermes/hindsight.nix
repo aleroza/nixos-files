@@ -86,16 +86,29 @@ in
       text = ''
         set -euo pipefail
 
+        # Activation scripts run with a minimal env (no /run/current-system/sw/bin
+        # on PATH by default). Resolve absolute paths so we don't depend on
+        # whatever's currently exported. Pattern mirrors nixos-activate.service
+        # in default.nix, which exports PATH=/run/current-system/sw/bin
+        # before invoking the activation script.
+        export PATH=/run/current-system/sw/bin
+
         HERMES_BIN='${hermesBin}'
         HERMES_USER=hermes
         HERMES_HOME='${hermesHome}'
+        SUDO_BIN=$(command -v sudo)
+
+        if [[ -z "$SUDO_BIN" ]]; then
+          echo "hindsight-plugin: sudo not found in /run/current-system/sw/bin" >&2
+          exit 1
+        fi
 
         # Idempotency check: if hindsight is already in the plugin list,
         # nothing to do. `hermes plugins list` returns 0 with the plugin
         # table on stdout when the plugin is installed; absent plugins
         # are simply not in the table. We grep for "hindsight" in the
         # first column rather than parsing the table.
-        if sudo -u "$HERMES_USER" HOME="$HERMES_HOME" \
+        if "$SUDO_BIN" -u "$HERMES_USER" HOME="$HERMES_HOME" \
              "$HERMES_BIN" plugins list 2>/dev/null \
              | grep -qE '(^|\s)hindsight(\s|$)'; then
           echo "hindsight-plugin: already installed, no-op"
@@ -108,7 +121,7 @@ in
         # fetches into ~/.local/share/uv/...).
         # --no-enable: install inert. Activation (settings.memory.provider
         # = "hindsight" + hermes-agent restart) happens via default.nix.
-        sudo -u "$HERMES_USER" HOME="$HERMES_HOME" \
+        "$SUDO_BIN" -u "$HERMES_USER" HOME="$HERMES_HOME" \
           "$HERMES_BIN" plugins install hindsight \
             --yes-deps \
             --no-enable
