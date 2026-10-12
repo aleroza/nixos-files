@@ -121,10 +121,31 @@ in
         # fetches into ~/.local/share/uv/...).
         # --no-enable: install inert. Activation (settings.memory.provider
         # = "hindsight" + hermes-agent restart) happens via default.nix.
-        "$SUDO_BIN" -u "$HERMES_USER" HOME="$HERMES_HOME" \
-          "$HERMES_BIN" plugins install hindsight \
-            --yes-deps \
-            --no-enable
+        #
+        # Failure handling: we MUST NOT fail the nixos-rebuild switch on a
+        # transient network error during install. The earlier version did
+        # (set -e + raw install) and a single TLS EOF on the GitHub clone
+        # poisoned the whole activation, leaving the host on a stale
+        # generation. Wrap with retry + always-succeed so the switch commits
+        # regardless. We log loudly on failure so it's visible in the
+        # activation output.
+        install_ok=1
+        for attempt in 1 2 3; do
+          if "$SUDO_BIN" -u "$HERMES_USER" HOME="$HERMES_HOME" \
+               "$HERMES_BIN" plugins install hindsight \
+                 --yes-deps \
+                 --no-enable; then
+            install_ok=0
+            break
+          fi
+          rc=$?
+          echo "hindsight-plugin: install attempt $attempt failed (exit $rc), retrying in 10s" >&2
+          sleep 10
+        done
+        if [[ "$install_ok" -ne 0 ]]; then
+          echo "hindsight-plugin: WARNING — install failed after 3 attempts (likely network/TLS); activation continues." >&2
+          echo "hindsight-plugin: fix by running: sudo -u hermes HOME=/var/lib/hermes hermes plugins install hindsight --yes-deps --no-enable" >&2
+        fi
       '';
     };
   };
