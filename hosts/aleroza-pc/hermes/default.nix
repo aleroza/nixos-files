@@ -35,6 +35,7 @@
 {
   imports = [
     ./aphrodite.nix
+    ./hindsight.nix
     ./openviking.nix
   ];
 
@@ -217,7 +218,7 @@
       };
     };
     settings.memory.write_approval = "always";
-    settings.memory.provider = "openviking";
+    settings.memory.provider = "hindsight";
     settings.context.engine = "aphrodite";
     # Mirror the Aphrodite TOML [compression] engine_threshold_pct — Hermes
     # renders context.engine_threshold_pct into ~/.hermes/config.yaml but the
