@@ -182,16 +182,20 @@
       is reversible without sudo and continues to auto-approve.
     '';
 
-    # Compression tuning for v0.20.0 (Herald). The large-window model
-    # M3 (256K) means threshold (~50%, ~128K) rarely fires, so bulky
-    # tool-output rides in history and gets re-sent every turn.
-    # Proactive prune reclaims it early; min_tail_user_messages=3
-    # keeps the last 3 real user turns verbatim when tool output
-    # fills the tail token budget (the default 1 keeps only the
-    # last). Both are opt-in upstreams but worth the cache-break
-    # cost on this host.
+    # Compression tuning for v0.20.0 (Herald). M3 is 256K context;
+    # we set proactive_prune_tokens = 500000 so compression fires
+    # *before* any context-celling (in case Hermes adds a hard celling
+    # later) rather than waiting for the model-window edge. The
+    # threshold is high enough that tool-output rides uncompressed in
+    # normal sessions and only triggers on pathological turns. min_tail
+    # keeps the last 3 real user turns verbatim so compression never
+    # drops the active context.
     settings.compression.min_tail_user_messages = 3;
-    settings.compression.proactive_prune_tokens = 48000;
+    # Billing guard: MiniMax doubles per-token cost when input exceeds 512k.
+    # Prune well under it — 350k leaves ~160k headroom for tool-output spikes
+    # that arrive between compression passes, while still letting normal
+    # multi-turn sessions ride uncompressed.
+    settings.compression.proactive_prune_tokens = 350000;
 
     # Memory provider: OpenViking. The plugin in upstream
     # hermes-agent reads OPENVIKING_* env from environmentFiles +

@@ -388,10 +388,10 @@ in
         ccr_ttl_seconds = 3600
 
         [compression]
-        engine_threshold_pct = 55
+        engine_threshold_pct = 40
         engine_protect_first = 2
-        engine_protect_last = 5
-        engine_min_msgs = 16
+        engine_protect_last = 3
+        engine_min_msgs = 8
         tool_threshold_token = 384
         tool_threshold_cache = 4096
         terminal_threshold = 1024
