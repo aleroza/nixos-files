@@ -219,7 +219,12 @@
     settings.memory.write_approval = "always";
     settings.memory.provider = "openviking";
     settings.context.engine = "aphrodite";
-    settings.context.engine_threshold_pct = 55;
+    # Mirror the Aphrodite TOML [compression] engine_threshold_pct — Hermes
+    # renders context.engine_threshold_pct into ~/.hermes/config.yaml but the
+    # active compression happens in the proxy (TOML on :9798). Keeping the
+    # two in lockstep avoids a misleading "55" in the rendered YAML when
+    # the proxy is actually firing at 40.
+    settings.context.engine_threshold_pct = 40;
 
     settings.memory.userProfileEnabled = true;
 
