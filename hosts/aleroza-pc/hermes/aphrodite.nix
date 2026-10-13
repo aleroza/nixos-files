@@ -142,15 +142,17 @@ in
     system.activationScripts."aphrodite-plugin" = {
       deps = [ "hermes-agent-setup" ];
       text = ''
+        # Why? See AGENTS.md "Activation Scripts" — Antipattern 3:
         set -euo pipefail
 
-        PLUGIN_SRC='${pluginSrc}'
-        PROXY_BIN='${proxyBin}'
-        PROXY_DYLIB='${proxyDylib}'
+        main() {
+          PLUGIN_SRC='${pluginSrc}'
+          PROXY_BIN='${proxyBin}'
+          PROXY_DYLIB='${proxyDylib}'
 
-        CLONE_PATH=${hermesHome}/Aphrodite-Hermes
-        PLUGIN_DIR=${hermesHome}/.hermes/plugins/aphrodite
-        BIN_DIR="$PLUGIN_DIR/binaries"
+          CLONE_PATH=${hermesHome}/Aphrodite-Hermes
+          PLUGIN_DIR=${hermesHome}/.hermes/plugins/aphrodite
+          BIN_DIR="$PLUGIN_DIR/binaries"
 
         # ────────────────────────────────────────────────────────
         # Clone mirror. Symlink (not copy). Used by humans + the
@@ -419,6 +421,9 @@ in
             echo "aphrodite-plugin: $APHRODITE_CONFIG (mode 0640 hermes:hermes)"
           fi
         fi
+        }
+
+        main "$@"
       '';
     };
 

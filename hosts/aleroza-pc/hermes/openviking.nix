@@ -106,75 +106,80 @@ in
     system.activationScripts."openviking-plugin" = {
       deps = [ "hermes-agent-setup" ];
       text = ''
+        # Why? See AGENTS.md "Activation Scripts" — Antipattern 3:
         set -euo pipefail
 
-        PLUGIN_SRC='${pluginSrc}'
-        PLUGIN_DIR=${hermesHome}/.hermes/plugins/openviking
+        main() {
+          PLUGIN_SRC='${pluginSrc}'
+          PLUGIN_DIR=${hermesHome}/.hermes/plugins/openviking
 
-        # ────────────────────────────────────────────────────────
-        # Plugin directory. MUST be a real directory, not a symlink
-        # to /nix/store — the Python loader resolves
-        # Path(__file__).resolve().parent and looks for sibling files
-        # there. A symlink to a read-only store path makes that
-        # resolution point at the store, where register_memory_provider
-        # is called from a path the gateway considers foreign.
-        #
-        # If PLUGIN_DIR is a stale symlink to a store path from a
-        # previous version of this module, remove it and replace with
-        # a real directory.
-        # ────────────────────────────────────────────────────────
-        if [[ -L "$PLUGIN_DIR" ]]; then
-          rm -f "$PLUGIN_DIR"
-        fi
-        if [[ ! -d "$PLUGIN_DIR" ]]; then
-          mkdir -p "$PLUGIN_DIR"
-        fi
-        chown hermes:hermes "$PLUGIN_DIR"
-        chmod 0750 "$PLUGIN_DIR"
-
-        # ────────────────────────────────────────────────────────
-        # plugin.yaml. Symlink to the store source (loader just
-        # parses it for metadata).
-        # ────────────────────────────────────────────────────────
-        yaml_link="$PLUGIN_DIR/plugin.yaml"
-        yaml_src="$PLUGIN_SRC/plugin.yaml"
-        if [[ ! -L "$yaml_link" ]] || [[ "$(readlink -f "$yaml_link")" != "$yaml_src" ]]; then
-          ln -sfn "$yaml_src" "$yaml_link"
-        fi
-        chown -h hermes:hermes "$yaml_link"
-        chmod -h 0644 "$yaml_link"
-
-        # ────────────────────────────────────────────────────────
-        # __init__.py. COPIED (not symlinked) so Path(__file__)
-        # .resolve() inside the Python loader sees the real
-        # /var/lib/hermes/.hermes/plugins/openviking/ as the plugin
-        # directory. Idempotent: copy only if missing, symlinked-to-
-        # wrong-target, or stale (size mismatch with source).
-        # ────────────────────────────────────────────────────────
-        init_dest="$PLUGIN_DIR/__init__.py"
-        init_src="$PLUGIN_SRC/__init__.py"
-        need_copy=0
-        if [[ ! -e "$init_dest" ]]; then
-          need_copy=1
-        elif [[ -L "$init_dest" ]]; then
-          # A symlink here breaks Path.resolve() — remove and replace.
-          rm -f "$init_dest"
-          need_copy=1
-        else
-          src_size=$(stat -c%s "$init_src" 2>/dev/null || echo 0)
-          dst_size=$(stat -c%s "$init_dest" 2>/dev/null || echo 0)
-          if [[ "$src_size" != "$dst_size" ]] || [[ "$src_size" -eq 0 ]]; then
-            need_copy=1
+          # ────────────────────────────────────────────────────────
+          # Plugin directory. MUST be a real directory, not a symlink
+          # to /nix/store — the Python loader resolves
+          # Path(__file__).resolve().parent and looks for sibling files
+          # there. A symlink to a read-only store path makes that
+          # resolution point at the store, where register_memory_provider
+          # is called from a path the gateway considers foreign.
+          #
+          # If PLUGIN_DIR is a stale symlink to a store path from a
+          # previous version of this module, remove it and replace with
+          # a real directory.
+          # ────────────────────────────────────────────────────────
+          if [[ -L "$PLUGIN_DIR" ]]; then
+            rm -f "$PLUGIN_DIR"
           fi
-        fi
-        if [[ "$need_copy" -eq 1 ]]; then
-          cp -f "$init_src" "$init_dest"
-        fi
-        chown hermes:hermes "$init_dest"
-        chmod 0644 "$init_dest"
+          if [[ ! -d "$PLUGIN_DIR" ]]; then
+            mkdir -p "$PLUGIN_DIR"
+          fi
+          chown hermes:hermes "$PLUGIN_DIR"
+          chmod 0750 "$PLUGIN_DIR"
 
-        echo "openviking-plugin: $PLUGIN_DIR/ (real, hermes:hermes 0750)"
-        echo "openviking-plugin:   -> $PLUGIN_SRC (plugin.yaml symlinked, __init__.py copied)"
+          # ────────────────────────────────────────────────────────
+          # plugin.yaml. Symlink to the store source (loader just
+          # parses it for metadata).
+          # ────────────────────────────────────────────────────────
+          yaml_link="$PLUGIN_DIR/plugin.yaml"
+          yaml_src="$PLUGIN_SRC/plugin.yaml"
+          if [[ ! -L "$yaml_link" ]] || [[ "$(readlink -f "$yaml_link")" != "$yaml_src" ]]; then
+            ln -sfn "$yaml_src" "$yaml_link"
+          fi
+          chown -h hermes:hermes "$yaml_link"
+          chmod -h 0644 "$yaml_link"
+
+          # ────────────────────────────────────────────────────────
+          # __init__.py. COPIED (not symlinked) so Path(__file__)
+          # .resolve() inside the Python loader sees the real
+          # /var/lib/hermes/.hermes/plugins/openviking/ as the plugin
+          # directory. Idempotent: copy only if missing, symlinked-to-
+          # wrong-target, or stale (size mismatch with source).
+          # ────────────────────────────────────────────────────────
+          init_dest="$PLUGIN_DIR/__init__.py"
+          init_src="$PLUGIN_SRC/__init__.py"
+          need_copy=0
+          if [[ ! -e "$init_dest" ]]; then
+            need_copy=1
+          elif [[ -L "$init_dest" ]]; then
+            # A symlink here breaks Path.resolve() — remove and replace.
+            rm -f "$init_dest"
+            need_copy=1
+          else
+            src_size=$(stat -c%s "$init_src" 2>/dev/null || echo 0)
+            dst_size=$(stat -c%s "$init_dest" 2>/dev/null || echo 0)
+            if [[ "$src_size" != "$dst_size" ]] || [[ "$src_size" -eq 0 ]]; then
+              need_copy=1
+            fi
+          fi
+          if [[ "$need_copy" -eq 1 ]]; then
+            cp -f "$init_src" "$init_dest"
+          fi
+          chown hermes:hermes "$init_dest"
+          chmod 0644 "$init_dest"
+
+          echo "openviking-plugin: $PLUGIN_DIR/ (real, hermes:hermes 0750)"
+          echo "openviking-plugin:   -> $PLUGIN_SRC (plugin.yaml symlinked, __init__.py copied)"
+        }
+
+        main "$@"
       '';
     };
   };

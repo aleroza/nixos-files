@@ -62,7 +62,8 @@
 
 let
   hermesHome = "/var/lib/hermes";
-  hermesBin = "/run/current-system/sw/bin/hermes";
+  # Why? See AGENTS.md "Activation Scripts" — Antipattern 1:
+  hermesBin = "${config.system.path}/bin/hermes";
 in
 {
   config = {
@@ -88,107 +89,111 @@ in
     system.activationScripts."hindsight-plugin" = {
       deps = [ "hermes-agent-setup" ];
       text = ''
+        # Why? See AGENTS.md "Activation Scripts" — Antipatterns 2 & 3:
         set -euo pipefail
 
-        export PATH=/run/current-system/sw/bin:/run/current-system/sw/sbin
+        main() {
+          HERMES_BIN='${hermesBin}'
+          HERMES_USER=hermes
+          HERMES_HOME='${hermesHome}'
+          PLUGIN_DIR="$HERMES_HOME/.hermes/plugins/hindsight"
+          MARKER="$PLUGIN_DIR/__init__.py"
 
-        HERMES_BIN='${hermesBin}'
-        HERMES_USER=hermes
-        HERMES_HOME='${hermesHome}'
-        PLUGIN_DIR="$HERMES_HOME/.hermes/plugins/hindsight"
-        MARKER="$PLUGIN_DIR/__init__.py"
+          # ────────────────────────────────────────────────────────
+          # Idempotency check.
+          #
+          # Two signals, in order of trust:
+          #
+          #   1. filesystem marker — if the plugin's __init__.py is on
+          #      disk under the hermes user's plugin dir, it's installed
+          #      regardless of what `hermes plugins list` reports (which
+          #      can lie if invoked under a degraded hermes-agent state).
+          #      root can read the file directly; no runuser needed.
+          #
+          #   2. `hermes plugins list hindsight` via runuser — defensive
+          #      cross-check. If the marker exists but the loader doesn't
+          #      know about the plugin (e.g. fresh hermes-agent upgrade
+          #      lost the catalog cache), log a warning so we know to
+          #      re-run `hermes plugins adopt` or similar manually. We
+          #      do NOT treat that mismatch as "not installed" — that
+          #      was the bug in the previous version (false negative →
+          #      install → "Plugin already exists" → switch failed).
+          #
+          # If the marker is missing AND the loader confirms absence,
+          # we install.
+          # ────────────────────────────────────────────────────────
+          if [[ -f "$MARKER" ]]; then
+            echo "hindsight-plugin: marker present at $MARKER — already installed"
+            # Cross-check (best-effort, never fails activation).
+            if runuser -u "$HERMES_USER" -- env HOME="$HERMES_HOME" \
+                 "$HERMES_BIN" plugins list 2>/dev/null \
+                 | grep -qE '(^|\s)hindsight(\s|$)'; then
+              echo "hindsight-plugin: hermes plugins list confirms install, no-op"
+            else
+              echo "hindsight-plugin: WARNING — plugin files present but loader does not see hindsight" >&2
+              echo "hindsight-plugin:   possible cause: catalog cache stale, or hermes-agent upgrade" >&2
+              echo "hindsight-plugin:   no-op (not overwriting on disk); investigate manually if memory breaks" >&2
+            fi
+            return 0
+          fi
 
-        # ────────────────────────────────────────────────────────
-        # Idempotency check.
-        #
-        # Two signals, in order of trust:
-        #
-        #   1. filesystem marker — if the plugin's __init__.py is on
-        #      disk under the hermes user's plugin dir, it's installed
-        #      regardless of what `hermes plugins list` reports (which
-        #      can lie if invoked under a degraded hermes-agent state).
-        #      root can read the file directly; no runuser needed.
-        #
-        #   2. `hermes plugins list hindsight` via runuser — defensive
-        #      cross-check. If the marker exists but the loader doesn't
-        #      know about the plugin (e.g. fresh hermes-agent upgrade
-        #      lost the catalog cache), log a warning so we know to
-        #      re-run `hermes plugins adopt` or similar manually. We
-        #      do NOT treat that mismatch as "not installed" — that
-        #      was the bug in the previous version (false negative →
-        #      install → "Plugin already exists" → switch failed).
-        #
-        # If the marker is missing AND the loader confirms absence,
-        # we install.
-        # ────────────────────────────────────────────────────────
-        if [[ -f "$MARKER" ]]; then
-          echo "hindsight-plugin: marker present at $MARKER — already installed"
-          # Cross-check (best-effort, never fails activation).
+          # Secondary check via the loader — only runs if the marker is
+          # missing. If the loader says installed but the marker is gone,
+          # something deleted the plugin files out from under us; reinstall
+          # to restore. If the loader also says absent, install fresh.
+          loader_says_installed=0
           if runuser -u "$HERMES_USER" -- env HOME="$HERMES_HOME" \
                "$HERMES_BIN" plugins list 2>/dev/null \
                | grep -qE '(^|\s)hindsight(\s|$)'; then
-            echo "hindsight-plugin: hermes plugins list confirms install, no-op"
+            loader_says_installed=1
+          fi
+
+          if [[ "$loader_says_installed" -eq 1 ]]; then
+            echo "hindsight-plugin: loader reports installed but marker is missing — reinstalling"
           else
-            echo "hindsight-plugin: WARNING — plugin files present but loader does not see hindsight" >&2
-            echo "hindsight-plugin:   possible cause: catalog cache stale, or hermes-agent upgrade" >&2
-            echo "hindsight-plugin:   no-op (not overwriting on disk); investigate manually if memory breaks" >&2
+            echo "hindsight-plugin: not installed, running: hermes plugins install hindsight --yes-deps --no-enable"
           fi
-          exit 0
-        fi
 
-        # Secondary check via the loader — only runs if the marker is
-        # missing. If the loader says installed but the marker is gone,
-        # something deleted the plugin files out from under us; reinstall
-        # to restore. If the loader also says absent, install fresh.
-        loader_says_installed=0
-        if runuser -u "$HERMES_USER" -- env HOME="$HERMES_HOME" \
-             "$HERMES_BIN" plugins list 2>/dev/null \
-             | grep -qE '(^|\s)hindsight(\s|$)'; then
-          loader_says_installed=1
-        fi
-
-        if [[ "$loader_says_installed" -eq 1 ]]; then
-          echo "hindsight-plugin: loader reports installed but marker is missing — reinstalling"
-        else
-          echo "hindsight-plugin: not installed, running: hermes plugins install hindsight --yes-deps --no-enable"
-        fi
-
-        # --yes-deps: auto-consent to Python dependency installation (the
-        # plugin depends on hindsight-client + hindsight-embed which uv
-        # fetches into ~/.local/share/uv/...).
-        # --no-enable: install inert. Activation (settings.memory.provider
-        # = "hindsight" + hermes-agent restart) happens via default.nix.
-        #
-        # Failure handling: a transient network error during install
-        # (e.g. github.com TLS EOF during git clone) MUST NOT fail the
-        # whole nixos-rebuild switch — that leaves the host on a stale
-        # generation. Retry up to 3 times with 10s backoff. If install
-        # ultimately fails, log a loud WARNING and return 0 anyway so
-        # the switch commits; the operator can rerun manually.
-        install_ok=1
-        install_args=(--yes-deps --no-enable)
-        if [[ "$loader_says_installed" -eq 1 ]]; then
-          install_args=(--force --yes-deps --no-enable)
-        fi
-        for attempt in 1 2 3; do
-          if runuser -u "$HERMES_USER" -- env HOME="$HERMES_HOME" \
-               "$HERMES_BIN" plugins install hindsight "''${install_args[@]}"; then
-            install_ok=0
-            break
+          # --yes-deps: auto-consent to Python dependency installation (the
+          # plugin depends on hindsight-client + hindsight-embed which uv
+          # fetches into ~/.local/share/uv/...).
+          # --no-enable: install inert. Activation (settings.memory.provider
+          # = "hindsight" + hermes-agent restart) happens via default.nix.
+          #
+          # Failure handling: a transient network error during install
+          # (e.g. github.com TLS EOF during git clone) MUST NOT fail the
+          # whole nixos-rebuild switch — that leaves the host on a stale
+          # generation. Retry up to 3 times with 10s backoff. If install
+          # ultimately fails, log a loud WARNING and return 0 anyway so
+          # the switch commits; the operator can rerun manually.
+          install_ok=1
+          install_args=(--yes-deps --no-enable)
+          if [[ "$loader_says_installed" -eq 1 ]]; then
+            install_args=(--force --yes-deps --no-enable)
           fi
-          rc=$?
-          echo "hindsight-plugin: install attempt $attempt failed (exit $rc), retrying in 10s" >&2
-          sleep 10
-        done
-        if [[ "$install_ok" -ne 0 ]]; then
-          echo "hindsight-plugin: WARNING — install failed after 3 attempts (likely network/TLS)" >&2
-          echo "hindsight-plugin: activation continues; rerun manually with:" >&2
-          echo "hindsight-plugin:   runuser -u hermes -- env HOME=/var/lib/hermes /run/current-system/sw/bin/hermes plugins install hindsight --yes-deps --no-enable" >&2
-          # Explicit exit 0 so set -e + activation script completion
-          # do not roll back the generation. The WARNING above is the
-          # operator-visible signal.
-          exit 0
-        fi
+          for attempt in 1 2 3; do
+            if runuser -u "$HERMES_USER" -- env HOME="$HERMES_HOME" \
+                 "$HERMES_BIN" plugins install hindsight "''${install_args[@]}"; then
+              install_ok=0
+              break
+            fi
+            rc=$?
+            echo "hindsight-plugin: install attempt $attempt failed (exit $rc), retrying in 10s" >&2
+            sleep 10
+          done
+          if [[ "$install_ok" -ne 0 ]]; then
+            echo "hindsight-plugin: WARNING — install failed after 3 attempts (likely network/TLS)" >&2
+            echo "hindsight-plugin: activation continues; rerun manually with:" >&2
+            echo "hindsight-plugin:   runuser -u hermes -- env HOME=/var/lib/hermes /run/current-system/sw/bin/hermes plugins install hindsight --yes-deps --no-enable" >&2
+            # Return 0 (not exit 0) so the surrounding activation script
+            # continues — the final `ln -sfn ... /run/current-system` line
+            # must run, or the next boot fails to chase
+            # /run/current-system/systemd/lib/systemd/systemd.
+            return 0
+          fi
+        }
+
+        main "$@"
       '';
     };
   };
