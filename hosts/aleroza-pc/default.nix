@@ -86,6 +86,9 @@
     # VLM still routes through Google via the host proxy.
     openviking.enable = true;
 
+    # FlClash removed from nixpkgs; pin upstream AppImage instead.
+    flclash.enable = true;
+
     # xserver.enable = true; @ Wayland in gnome
     gnome = {
       enable = true;
@@ -271,7 +274,7 @@
     wget
     htop
     btop
-    cmatrix
+    # cmatrix
     parted
     fastfetch
     git
@@ -288,7 +291,6 @@
 
     vscode
     gh
-    nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.flclash
     telegram-desktop
     onlyoffice-desktopeditors
     filezilla

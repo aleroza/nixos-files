@@ -146,6 +146,10 @@
   };
 
   # ── FlClash autostart ───────────────────────────────────────────
+  # The package is installed by modules/flclash.nix as `auto.flclash`,
+  # which puts a `flclash` binary on $PATH. The previous nixpkgs
+  # package ran FlClash as `${pkg}/app/flclash/FlClash %U`; the
+  # upstream AppImage wrapper exposes the same entrypoint.
   xdg.configFile."autostart/FlClash.desktop" = {
     force = true;
     text = ''
@@ -153,9 +157,7 @@
       Type=Application
       Name=FlClash
       Comment=FlClash startup script
-      Exec=${
-        nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.flclash
-      }/app/flclash/FlClash
+      Exec=flclash %U
       StartupNotify=false
       Terminal=false
     '';

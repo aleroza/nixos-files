@@ -248,6 +248,19 @@ in
       description = "Enable Flatpak (flathub) support.";
     };
 
+    # ▸ FlClash (upstream AppImage, see modules/flclash.nix)
+    flclash = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Install FlClash (proxy GUI) from the upstream AppImage.
+          Removed from nixpkgs; see modules/flclash.nix for the
+          pinned version and the manual bump procedure.
+        '';
+      };
+    };
+
     # ▸ Removable media (cameras, phones over MTP/PTP)
     removableMedia = mkOption {
       type = types.bool;
