@@ -364,14 +364,29 @@
   systemd.services.hermes-agent.serviceConfig.NoNewPrivileges = lib.mkForce false;
   systemd.services.hermes-agent.serviceConfig.ProtectSystem = lib.mkForce "no";
 
-  # Needed for linking Aphrodite library, and to make hermes-agent's
-  # Python interpreter find the hindsight-client / hindsight-embed
-  # wheels installed by hosts/aleroza-pc/hermes/hindsight.nix into
-  # /var/lib/hermes/.hermes/python-deps. Without PYTHONPATH the plugin
-  # would `import hindsight_embed` against the read-only site-packages
-  # in /nix/store and not find the package at all.
+  # Needed for linking Aphrodite library, to make hermes-agent's Python
+  # interpreter find the hindsight-client / hindsight-embed wheels
+  # installed by hosts/aleroza-pc/hermes/hindsight.nix into
+  # /var/lib/hermes/.hermes/python-deps, AND to make the plugin-spawned
+  # `uvx hindsight-api` daemon (started lazily by hindsight_embed's
+  # daemon_embed_manager) able to dlopen the libraries its bundled
+  # embedded PostgreSQL needs:
+  #   libzstd.so.1, liblz4.so.1, libssl.so.3, libcrypto.so.3,
+  #   libgssapi_krb5.so.2, libz.so.1, liblzma.so.5.
+  # Without these the daemon fails to start with
+  # "Failed to start embedded PostgreSQL ... libzstd.so.1 => not found"
+  # and `hermes memory status` reports available but real retain/recall
+  # never reach the daemon.
   systemd.services.hermes-agent.serviceConfig.Environment = [
-    "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}"
+    "LD_LIBRARY_PATH=${lib.makeLibraryPath [
+      pkgs.stdenv.cc.cc.lib
+      pkgs.zstd
+      pkgs.lz4
+      pkgs.openssl
+      pkgs.krb5
+      pkgs.zlib
+      pkgs.xz
+    ]}"
     "PYTHONPATH=/var/lib/hermes/.hermes/python-deps"
   ];
 
