@@ -359,9 +359,15 @@
   systemd.services.hermes-agent.serviceConfig.NoNewPrivileges = lib.mkForce false;
   systemd.services.hermes-agent.serviceConfig.ProtectSystem = lib.mkForce "no";
 
-  # Needed for linking Aphrodite library
+  # Needed for linking Aphrodite library, and to make hermes-agent's
+  # Python interpreter find the hindsight-client / hindsight-embed
+  # wheels installed by hosts/aleroza-pc/hermes/hindsight.nix into
+  # /var/lib/hermes/.hermes/python-deps. Without PYTHONPATH the plugin
+  # would `import hindsight_embed` against the read-only site-packages
+  # in /nix/store and not find the package at all.
   systemd.services.hermes-agent.serviceConfig.Environment = [
     "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}"
+    "PYTHONPATH=/var/lib/hermes/.hermes/python-deps"
   ];
 
   # ▸ 4. Hermes-triggered system activation.

@@ -64,6 +64,15 @@ let
   hermesHome = "/var/lib/hermes";
   # Why? See AGENTS.md "Activation Scripts" — Antipattern 1:
   hermesBin = "${config.system.path}/bin/hermes";
+  # Why? Antipattern 1 again — uv is in /run/current-system/sw/bin/uv, not
+  # anywhere we can rely on at activation time as a bare name.
+  uvBin = "${config.system.path}/bin/uv";
+  # Where to drop the hindsight-client / hindsight-embed wheels so the
+  # plugin's `import hindsight_embed.daemon_embed_manager` resolves at
+  # runtime. /nix/store/<hash>-hermes-agent-*/lib/python3.14/site-packages
+  # is read-only; /var/lib/hermes is RW. Plugin code (embedded.py) reads
+  # PYTHONPATH-extra via the manager's child-env handling.
+  pythonDeps = "${hermesHome}/.hermes/python-deps";
 in
 {
   config = {
@@ -191,6 +200,139 @@ in
             # /run/current-system/systemd/lib/systemd/systemd.
             return 0
           fi
+        }
+
+        main "$@"
+      '';
+    };
+
+    # Activation: pin hindsight-client / hindsight-embed into
+    # ~/.hermes/python-deps/ (RW) so the plugin's embedded daemon
+    # manager can import them. Hermes's own `hermes memory setup` is
+    # supposed to do this via `pm.sync_venv`, but on NixOS that path
+    # walks into /nix/store/<hash>-hermes-agent-*/lib/python3.14/site-packages
+    # looking for uv.lock and aborts with FileNotFoundError — uv.lock
+    # is a git-tree artifact, not a Nix-store one. We sidestep by
+    # running `uv pip install --target` directly into a hermes-owned
+    # RW directory, then making the plugin's hermes-agent service see
+    # it via PYTHONPATH (added in default.nix alongside the plugin
+    # enablement).
+    #
+    # Idempotency: presence of hindsight_embed/__init__.py under the
+    # target dir is the marker. If present, skip.
+    #
+    # Failure handling: same as the install snippet — transient network
+    # errors must not fail the switch. Warn and continue.
+    system.activationScripts."hindsight-pip-deps" = {
+      deps = [ "hindsight-plugin" ];
+      text = ''
+        # Why? See AGENTS.md "Activation Scripts" — Antipatterns 2 & 3.
+        set -euo pipefail
+
+        main() {
+          local HERMES_USER=hermes
+          local HERMES_HOME='${hermesHome}'
+          local UV_BIN='${uvBin}'
+          local DEPS_DIR='${pythonDeps}'
+          local MARKER="$DEPS_DIR/hindsight_embed/__init__.py"
+
+          mkdir -p "$DEPS_DIR"
+          chown "$HERMES_USER:$HERMES_USER" "$DEPS_DIR"
+          chmod 0750 "$DEPS_DIR"
+
+          if [[ -f "$MARKER" ]]; then
+            echo "hindsight-pip-deps: marker present at $MARKER — already installed"
+            return 0
+          fi
+
+          echo "hindsight-pip-deps: installing hindsight-client + hindsight-embed into $DEPS_DIR"
+          if ! runuser -u "$HERMES_USER" -- env HOME="$HERMES_HOME" \
+               "$UV_BIN" pip install --target "$DEPS_DIR" \
+                 hindsight-client hindsight-embed; then
+            echo "hindsight-pip-deps: WARNING — uv pip install failed; activation continues" >&2
+            echo "hindsight-pip-deps: rerun manually with:" >&2
+            echo "hindsight-pip-deps:   runuser -u hermes -- env HOME=/var/lib/hermes ${uvBin} pip install --target ${pythonDeps} hindsight-client hindsight-embed" >&2
+            # Return 0 (not exit 0) — see AGENTS.md Antipattern 2.
+            return 0
+          fi
+
+          # Fix ownership: uv pip install --target creates files as the
+          # runuser (hermes) which is what we want, but be explicit so
+          # the next activation doesn't trip on a permission mismatch.
+          chown -R "$HERMES_USER:$HERMES_USER" "$DEPS_DIR"
+          echo "hindsight-pip-deps: ok"
+        }
+
+        main "$@"
+      '';
+    };
+
+    # Activation: lay down ~/.hindsight/profiles/default.env for the
+    # embedded daemon. The plugin's daemon_embed_manager reads this
+    # file when starting `uvx hindsight-api` and exports its contents
+    # into the daemon child's environment — this is how the daemon
+    # learns its LLM provider credentials. Without it, the daemon
+    # boots with no LLM API key and every embed/retain call fails.
+    #
+    # Idempotent: only writes if the file is missing. Operator can
+    # edit the file by hand later (e.g. to switch LLM provider); this
+    # snippet will not overwrite a non-empty file.
+    #
+    # Source of the API key: /run/secrets/hermes/env (sops secret, same
+    # one that feeds MINIMAX_API_KEY into hermes-agent). We re-use
+    # MINIMAX_API_KEY as HINDSIGHT_LLM_API_KEY — Hindsight's LLM client
+    # is OpenAI-compatible and the same bearer works against
+    # api.minimax.io. To switch providers, edit the file by hand; the
+    # activation script will leave existing content alone.
+    system.activationScripts."hindsight-profile-env" = {
+      deps = [ "hindsight-pip-deps" ];
+      text = ''
+        # Why? See AGENTS.md "Activation Scripts" — Antipatterns 2 & 3.
+        set -euo pipefail
+
+        main() {
+          local HERMES_USER=hermes
+          local HERMES_HOME='${hermesHome}'
+          local PROFILE_DIR="$HERMES_HOME/.hindsight/profiles"
+          local PROFILE_FILE="$PROFILE_DIR/default.env"
+          local SECRETS=/run/secrets/hermes/env
+
+          mkdir -p "$PROFILE_DIR"
+          chown -R "$HERMES_USER:$HERMES_USER" "$HERMES_HOME/.hindsight"
+          chmod 0750 "$PROFILE_DIR"
+
+          if [[ -s "$PROFILE_FILE" ]]; then
+            echo "hindsight-profile-env: $PROFILE_FILE already populated, not overwriting"
+            return 0
+          fi
+
+          if [[ ! -f "$SECRETS" ]]; then
+            echo "hindsight-profile-env: WARNING — $SECRETS not found; cannot seed LLM key" >&2
+            echo "hindsight-profile-env: write $PROFILE_FILE by hand with HINDSIGHT_LLM_API_KEY=..." >&2
+            return 0
+          fi
+
+          local KEY
+          KEY=$(grep '^MINIMAX_API_KEY=' "$SECRETS" | head -1 | cut -d= -f2- || true)
+          if [[ -z "$KEY" ]]; then
+            echo "hindsight-profile-env: WARNING — MINIMAX_API_KEY empty in $SECRETS" >&2
+            return 0
+          fi
+
+          cat > "$PROFILE_FILE" <<PROFILE_EOF
+        # Generated by hosts/aleroza-pc/hermes/hindsight.nix — do not edit
+        # unless you want to switch LLM providers. Re-running nixos-rebuild
+        # does not overwrite this file (it only seeds a missing/empty one).
+        # Sourced by the embedded daemon manager into uvx hindsight-api.
+        HINDSIGHT_LLM_API_KEY=$KEY
+        HINDSIGHT_LLM_BASE_URL=https://api.minimax.io/v1
+        HINDSIGHT_LLM_MODEL=MiniMax-M3
+        HINDSIGHT_EMBED_BASE_URL=https://api.minimax.io/v1
+        HINDSIGHT_EMBED_MODEL=text-embedding-3-small
+        PROFILE_EOF
+          chown "$HERMES_USER:$HERMES_USER" "$PROFILE_FILE"
+          chmod 0640 "$PROFILE_FILE"
+          echo "hindsight-profile-env: seeded $PROFILE_FILE from MINIMAX_API_KEY"
         }
 
         main "$@"
