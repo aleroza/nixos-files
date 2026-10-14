@@ -133,7 +133,7 @@ See the full reference in `users/modules/README.md`.
 
 1. **Calling a binary via `/run/current-system/sw/bin/<tool>`.** The symlink doesn't exist yet — it's created by the final activate line, after all snippets. `execve` fails with `ENOENT`, activate aborts. **Fix:** `''${config.system.path}/bin/<tool>`.
 2. **`exit 0` (any `exit`) at snippet top level.** Terminates the whole activate before the final `ln -sfn /run/current-system`. **Fix:** wrap the body in `main() { ... }; main "$@"` and use `return 0`.
-3. **`set -euo pipefail` at top level.** Any failure (even a false-y `[[ ... ]]`) drops activate. **Fix:** same — `main() { ... }` wrapper, `set -euo pipefail` inside the function, `return 0` for graceful-degradation paths.
+3. **`set -euo pipefail` at top level.** Any failure (even a false-y `[[ ... ]]`) drops activate. **Fix:** `set -euo pipefail` may live at the top of the snippet — the snippet is the only thing being executed in that subshell, so its strict mode is scoped to the snippet, not the whole activate script. The function-wrapper form (`main() { ... }`) is the **structural** guarantee that `return 0` is the only way to leave the script early and that the snippet body is not inlined as a top-level statement when the file is sourced; the strict-mode line itself is harmless at the snippet's top level.
 
 ### Correct template
 
