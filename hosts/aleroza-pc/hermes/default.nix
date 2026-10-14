@@ -81,15 +81,20 @@
     # download.sh expects, and we'd lose control of the
     # binaries/ directory layout.
 
-    # EnvironmentFiles are loaded in order. Later entries overwrite
-    # earlier ones on duplicate KEYs. The first one is the
-    # user-managed sops env (TELEGRAM_BOT_TOKEN, etc.). The second
-    # is the OpenViking user_key written by services.openviking-
-    # bootstrap (mode 0640 openviking:openviking, hermes user is
-    # in group openviking for read access).
+    # Earlier entries lose to later entries on duplicate KEYs. The
+    # first one is the user-managed sops env (TELEGRAM_BOT_TOKEN, etc.).
+    # The second is the OpenViking user_key written by services.openviking-
+    # bootstrap (mode 0640 openviking:openviking, hermes user is in
+    # group openviking for read access). The third is the Hindsight env
+    # written by hosts/aleroza-pc/hermes/hindsight.nix's
+    # hindsight-service-env activation script (mode 0640 hermes:hermes);
+    # it carries HINDSIGHT_API_KEY / HINDSIGHT_LLM_API_KEY sourced from
+    # MINIMAX_API_KEY so the plugin's get_secret() surface and the
+    # embedded daemon both resolve the key.
     environmentFiles = [
       "/run/secrets/hermes/env"
       "/opt/openviking/keys/user_key"
+      "/var/lib/hermes/.hermes/hindsight.env"
     ];
     environment = {
       HTTP_PROXY = "http://127.0.0.1:7890";
