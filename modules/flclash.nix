@@ -24,11 +24,11 @@
 let
   cfg = config.auto.flclash;
 
-  version = "0.8.99";
+  version = "0.9.2";
 
   src = pkgs.fetchurl {
     url = "https://github.com/chen08209/FlClash/releases/download/v${version}/FlClash-${version}-linux-amd64.AppImage";
-    sha256 = "sha256-HEHQ4yyNH6tNbRAxlXTA84Iwqdy+wSXAte+pYt4o6Eo=";
+    sha256 = "sha256-/bIUDj83IklL1YAIXR5t3z+LqiHGvg1H3iCmY3xkcvw=";
   };
 
   # wrapType2 — это правильный entry-point для Type 2 AppImage
@@ -57,11 +57,41 @@ let
       librsvg
     ];
   };
+
+  # `appimageTools.wrapType2` ships only the FHS-env wrapper — the
+  # .desktop file and the icon that live inside the AppImage are
+  # dropped on the floor. Unpack the AppImage a second time to lift
+  # the icon into the hicolor theme, so the app-menu entry shows a
+  # real icon instead of the generic "missing icon" placeholder.
+  unpacked = pkgs.appimageTools.extract {
+    pname = "flclash";
+    inherit version;
+    inherit src;
+  };
+
+  icon = pkgs.runCommand "flclash-icon" { } ''
+    mkdir -p "$out/share/icons/hicolor/512x512/apps"
+    cp ${unpacked}/FlClash.png "$out/share/icons/hicolor/512x512/apps/flclash.png"
+  '';
+
+  desktop = pkgs.makeDesktopItem {
+    name = "flclash";
+    desktopName = "FlClash";
+    comment = "Proxy GUI (mihomo / Clash.Meta front-end)";
+    exec = "${flclash}/bin/flclash %U";
+    icon = "flclash";
+    categories = [ "Network" ];
+    keywords = [ "FlClash" "Clash" "ClashMeta" "Proxy" ];
+  };
 in
 {
   # `auto.flclash.enable` is declared in modules/auto.nix (single source
   # of truth for `auto.*` options, per the convention in AGENTS.md).
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = [ flclash ];
+    environment.systemPackages = [
+      flclash
+      icon
+      desktop
+    ];
   };
 }

@@ -137,7 +137,7 @@
     # against the providers.* map below. Switching the upstream
     # model name in one place (services.aphrodite.defaultModel)
     # propagates here.
-    settings.model = "aphrodite-token/minimax/MiniMax-M3";
+    settings.model = "aphrodite-token/MiniMax-M3";
     settings.providers.aphrodite-token = {
       provider = "openai";
       base_url = "http://127.0.0.1:9798";
@@ -148,7 +148,7 @@
     # session keeps settings.model above. Aphrodite proxies the
     # M2.7 model through the same upstream (api_url+api_key), so
     # it routes via the same provider.
-    settings.delegation.model = "aphrodite-token/minimax/MiniMax-M2.7";
+    settings.delegation.model = "aphrodite-token/MiniMax-M2.7";
     settings.toolsets = [ "all" ];
 
     # Plugin enablement is handled by the activation script in
@@ -378,15 +378,17 @@
   # and `hermes memory status` reports available but real retain/recall
   # never reach the daemon.
   systemd.services.hermes-agent.serviceConfig.Environment = [
-    "LD_LIBRARY_PATH=${lib.makeLibraryPath [
-      pkgs.stdenv.cc.cc.lib
-      pkgs.zstd
-      pkgs.lz4
-      pkgs.openssl
-      pkgs.krb5
-      pkgs.zlib
-      pkgs.xz
-    ]}"
+    "LD_LIBRARY_PATH=${
+      lib.makeLibraryPath [
+        pkgs.stdenv.cc.cc.lib
+        pkgs.zstd
+        pkgs.lz4
+        pkgs.openssl
+        pkgs.krb5
+        pkgs.zlib
+        pkgs.xz
+      ]
+    }"
     "PYTHONPATH=/var/lib/hermes/.hermes/python-deps"
   ];
 

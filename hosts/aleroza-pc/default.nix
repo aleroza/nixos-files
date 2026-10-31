@@ -89,6 +89,9 @@
     # FlClash removed from nixpkgs; pin upstream AppImage instead.
     flclash.enable = true;
 
+    # OpenChamber has no nixpkgs package; pin upstream AppImage.
+    openchamber.enable = true;
+
     # xserver.enable = true; @ Wayland in gnome
     gnome = {
       enable = true;
@@ -305,7 +308,26 @@
     darktable
     exiftool
 
+    jq
+    bc
+    davinci-resolve
   ];
+
+  hardware.graphics = {
+    enable = true;
+    extraPackages = with pkgs; [
+      rocmPackages.clr.icd
+    ];
+  };
+
+  environment.sessionVariables.GST_PLUGIN_SYSTEM_PATH_1_0 =
+    lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0"
+      [
+        pkgs.gst_all_1.gst-plugins-good
+        pkgs.gst_all_1.gst-plugins-bad
+        pkgs.gst_all_1.gst-plugins-ugly
+        pkgs.gst_all_1.gst-libav
+      ];
 
   # ▸ Монитор (раскладка двух экранов, host-specific) ───────────────
   home-manager.users.aleroza.home.file.".config/monitors.xml" = {

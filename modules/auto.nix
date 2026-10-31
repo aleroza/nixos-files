@@ -261,6 +261,20 @@ in
       };
     };
 
+    # ▸ OpenChamber (upstream AppImage, see modules/openchamber.nix)
+    openchamber = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Install OpenChamber (desktop GUI for OpenCode sessions) from
+          the upstream AppImage. No nixpkgs package exists; see
+          modules/openchamber.nix for the pinned version and the manual
+          bump procedure.
+        '';
+      };
+    };
+
     # ▸ Removable media (cameras, phones over MTP/PTP)
     removableMedia = mkOption {
       type = types.bool;

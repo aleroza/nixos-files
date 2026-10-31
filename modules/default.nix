@@ -12,6 +12,7 @@
     ./security/sops.nix
     ./flatpak.nix
     ./flclash.nix
+    ./openchamber.nix
     ./removable-media.nix
     ./xserver.nix
     ./gnome
