@@ -132,23 +132,58 @@
       APHRODITE_CONTEXT_ENGINE = "1";
     };
     # Default to routing through the local Aphrodite CCR proxy
-    # (127.0.0.1:9798, see services.aphrodite). The model name
-    # uses the "provider/model" form so the gateway resolves it
-    # against the providers.* map below. Switching the upstream
-    # model name in one place (services.aphrodite.defaultModel)
+    # (127.0.0.1:9798, see services.aphrodite). Switching the
+    # upstream model name in one place (services.aphrodite.defaultModel)
     # propagates here.
-    settings.model = "aphrodite-token/MiniMax-M3";
+    #
+    # The model MUST be declared as a DICT with an explicit
+    # `provider` key, not as the "provider/model" string shorthand.
+    #
+    # Why: hermes_cli.runtime_provider._get_model_config() short-circuits
+    # on a string `model:` and returns {"default": "<verbatim>"} — it
+    # NEVER splits the "provider/model" prefix. A string form therefore
+    # leaves `model.provider` unset, resolve_requested_provider()
+    # returns "auto", and the resolution ladder falls through to the
+    # BUILT-IN `minimax` provider (base_url https://api.minimax.io/anthropic,
+    # api_mode anthropic_messages). The verbatim string
+    # "aphrodite-token/MiniMax-M3" then goes out as the MODEL ID ->
+    # MiniMax answers HTTP 400
+    #   "invalid params, unknown model 'aphrodite-token/MiniMax-M3' (2013)".
+    # The Aphrodite proxy on :9798 is never reached; the request goes
+    # straight to api.minimax.io with a mangled model id.
+    #
+    # The dict form is the only shape that populates `model.provider`:
+    # split_model_config_default() extracts the provider only from a
+    # dict-valued `model.default` / `model.model` / `model.name`.
+    #
+    # With this shape the runtime resolves to
+    #   provider=custom, api_mode=chat_completions,
+    #   base_url=http://127.0.0.1:9798
+    # and the wire model is the BARE upstream id ("MiniMax-M3") — a
+    # second prefix ("minimax/MiniMax-M3") would NOT be stripped by the
+    # provider normalizer and would land on the wire verbatim.
+    settings.model = {
+      default = "MiniMax-M3";
+      provider = "aphrodite-token";
+    };
     settings.providers.aphrodite-token = {
-      provider = "openai";
+      # The proxy speaks the OpenAI chat-completions dialect on :9798.
+      # `transport` is the key that actually selects it — `provider` is
+      # accepted by the schema but never read by the runtime resolver.
+      transport = "openai_chat";
       base_url = "http://127.0.0.1:9798";
       api_key_env = "MINIMAX_API_KEY";
-      max_tokens = 65536;
     };
-    # Sub-agents inherit delegation.model from settings; primary
-    # session keeps settings.model above. Aphrodite proxies the
-    # M2.7 model through the same upstream (api_url+api_key), so
-    # it routes via the same provider.
-    settings.delegation.model = "aphrodite-token/MiniMax-M2.7";
+    # Sub-agents need their OWN provider key: delegation.model is read
+    # as a plain model id (no "provider/model" splitting), and an empty
+    # delegation.provider means "inherit parent". Inheriting the parent's
+    # provider is correct here, but the parent model id must also be
+    # bare — a "aphrodite-token/..." prefix would reach MiniMax as part
+    # of the model id. So: bare model + explicit provider.
+    settings.delegation = {
+      model = "MiniMax-M2.7";
+      provider = "aphrodite-token";
+    };
     settings.toolsets = [ "all" ];
 
     # Plugin enablement is handled by the activation script in
@@ -378,17 +413,15 @@
   # and `hermes memory status` reports available but real retain/recall
   # never reach the daemon.
   systemd.services.hermes-agent.serviceConfig.Environment = [
-    "LD_LIBRARY_PATH=${
-      lib.makeLibraryPath [
-        pkgs.stdenv.cc.cc.lib
-        pkgs.zstd
-        pkgs.lz4
-        pkgs.openssl
-        pkgs.krb5
-        pkgs.zlib
-        pkgs.xz
-      ]
-    }"
+    "LD_LIBRARY_PATH=${lib.makeLibraryPath [
+      pkgs.stdenv.cc.cc.lib
+      pkgs.zstd
+      pkgs.lz4
+      pkgs.openssl
+      pkgs.krb5
+      pkgs.zlib
+      pkgs.xz
+    ]}"
     "PYTHONPATH=/var/lib/hermes/.hermes/python-deps"
   ];
 
