@@ -385,7 +385,15 @@ in
 
         [defaults]
         api_url = "https://api.minimax.io"
-        model = "MiniMax-M3"
+        # Upstream model id. MiniMax-M3.1-Flash is the current primary:
+        # same MoE base as M3 (428B total / 23B active) plus sparse
+        # attention, quantization-aware training and DSpark speculative
+        # decoding. Flat pricing $0.15/$0.60 per Mtok (vs M3 $0.30/$1.20
+        # with the permanent 50% discount) and $0.015 per Mtok cache read
+        # (vs $0.06) — and no price step above 512k input tokens, which
+        # M3 has (2x). Verified working on both the OpenAI and the
+        # Anthropic upstream paths.
+        model = "MiniMax-M3.1-Flash"
         api_key = "$API_KEY"
         ccr_ttl_seconds = 3600
 

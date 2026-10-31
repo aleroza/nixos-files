@@ -159,11 +159,11 @@
     # With this shape the runtime resolves to
     #   provider=custom, api_mode=chat_completions,
     #   base_url=http://127.0.0.1:9798
-    # and the wire model is the BARE upstream id ("MiniMax-M3") — a
-    # second prefix ("minimax/MiniMax-M3") would NOT be stripped by the
-    # provider normalizer and would land on the wire verbatim.
+    # and the wire model is the BARE upstream id ("MiniMax-M3.1-Flash") —
+    # a second prefix ("minimax/MiniMax-M3.1-Flash") would NOT be stripped
+    # by the provider normalizer and would land on the wire verbatim.
     settings.model = {
-      default = "MiniMax-M3";
+      default = "MiniMax-M3.1-Flash";
       provider = "aphrodite-token";
     };
     settings.providers.aphrodite-token = {
@@ -178,10 +178,14 @@
     # as a plain model id (no "provider/model" splitting), and an empty
     # delegation.provider means "inherit parent". Inheriting the parent's
     # provider is correct here, but the parent model id must also be
-    # bare — a "aphrodite-token/..." prefix would reach MiniMax as part
+    # bare — a "aphrodite-token/... " prefix would reach MiniMax as part
     # of the model id. So: bare model + explicit provider.
+    #
+    # M3.1-Flash for sub-agents too: M2.7 is two generations older
+    # (created 2026-03) and costs MORE per token, so keeping it here
+    # would be paying old prices for old quality.
     settings.delegation = {
-      model = "MiniMax-M2.7";
+      model = "MiniMax-M3.1-Flash";
       provider = "aphrodite-token";
     };
     settings.toolsets = [ "all" ];
@@ -223,20 +227,20 @@
       is reversible without sudo and continues to auto-approve.
     '';
 
-    # Compression tuning for v0.20.0 (Herald). M3 is 256K context;
-    # we set proactive_prune_tokens = 500000 so compression fires
-    # *before* any context-celling (in case Hermes adds a hard celling
-    # later) rather than waiting for the model-window edge. The
-    # threshold is high enough that tool-output rides uncompressed in
-    # normal sessions and only triggers on pathological turns. min_tail
-    # keeps the last 3 real user turns verbatim so compression never
-    # drops the active context.
+    # Compression tuning for v0.20.0 (Herald). min_tail keeps the last 3
+    # real user turns verbatim so compression never drops the active context.
     settings.compression.min_tail_user_messages = 3;
-    # Billing guard: MiniMax doubles per-token cost when input exceeds 512k.
-    # Prune well under it — 350k leaves ~160k headroom for tool-output spikes
-    # that arrive between compression passes, while still letting normal
-    # multi-turn sessions ride uncompressed.
-    settings.compression.proactive_prune_tokens = 350000;
+    # Billing guard (M3.1-Flash): pricing is FLAT — $0.15/$0.60 per Mtok
+    # with $0.015 per Mtok cache read, and NO price step above 512k input
+    # tokens (M3 doubled there; M3.1-Flash does not). The 512k guardrail
+    # that capped us at 350k no longer applies, so the ceiling is now
+    # the model window itself.
+    #
+    # 600k: ~2.4x the observed session peak (251k) and ~200k below the
+    # 1M window, so tool-output spikes between compression passes still
+    # fit. Raise further only after measuring real peaks — the window
+    # is the hard limit, not the budget.
+    settings.compression.proactive_prune_tokens = 600000;
 
     # Memory provider: OpenViking. The plugin in upstream
     # hermes-agent reads OPENVIKING_* env from environmentFiles +
