@@ -197,18 +197,7 @@
     # ownership. The gateway picks up plugins from ~/.hermes/
     # plugins/ at startup automatically; no settings.plugins.*
     # wiring needed here (that's the path for non-NixOS installs).
-    #
-    # The Jev plugins (see ./jev.nix) are the exception: they are
-    # installed by that module's activation script but stay disabled
-    # until TYPESAFE_API_KEY exists — it is a runtime secret, not a Nix
-    # input, so enablement cannot be decided at build time. The deny-list
-    # wins over plugins.enabled, so listing them here keeps them inert
-    # without touching the allow-list.
-    settings.plugins.disabled = [
-      "jev"
-      "jev-approvals"
-      "jev-cron-gate"
-    ];
+
     # v0.20.0 renamed smartPolicy -> smart_policy. The camelCase form
     # (set through the NixOS module until the rename) is silently
     # ignored by the new schema, so the guardian would never escalate
@@ -446,15 +435,17 @@
   # and `hermes memory status` reports available but real retain/recall
   # never reach the daemon.
   systemd.services.hermes-agent.serviceConfig.Environment = [
-    "LD_LIBRARY_PATH=${lib.makeLibraryPath [
-      pkgs.stdenv.cc.cc.lib
-      pkgs.zstd
-      pkgs.lz4
-      pkgs.openssl
-      pkgs.krb5
-      pkgs.zlib
-      pkgs.xz
-    ]}"
+    "LD_LIBRARY_PATH=${
+      lib.makeLibraryPath [
+        pkgs.stdenv.cc.cc.lib
+        pkgs.zstd
+        pkgs.lz4
+        pkgs.openssl
+        pkgs.krb5
+        pkgs.zlib
+        pkgs.xz
+      ]
+    }"
     "PYTHONPATH=/var/lib/hermes/.hermes/python-deps"
   ];
 
