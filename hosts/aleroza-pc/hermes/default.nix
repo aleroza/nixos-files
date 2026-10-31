@@ -348,17 +348,33 @@
     # via the upstream default overlay. .override on the derivation
     # attribute is wired by upstream's callPackage — extraPythonPackages
     # is a derivation-function parameter, not an mkDerivation attr.)
+    #
+    # The `version` override stamps the REAL upstream version into
+    # install-stamp.json. Upstream's nix/packages.nix never passes
+    # `version` to nix/hermes-agent.nix, whose parameter default is
+    # "0.0.0" — so the Nix build always stamped baseVersion="0.0.0" and
+    # Hermes reported version 0.0.0. Every plugin with a
+    # `requires_hermes` floor was then refused at install time
+    # (hermes-jev-routing wants >=0.21.4 and was rejected against
+    # "running 0.0.0").
+    #
+    # `version` is a derivation-function parameter, so it must be set
+    # through `.override { ... }` — `overrideAttrs` would be too late,
+    # the stamp file is already rendered by then. Keep the value in sync
+    # with the hermes-agent input's tag in flake.lock.
     package =
       let
         basePkg = hermes-agent.packages.x86_64-linux.default;
         pythonSrc = basePkg.hermesNpmLib.pythonSrc;
+        stamped = basePkg.override { version = "0.21.6"; };
+        pythonSrcStamped = stamped.hermesNpmLib.pythonSrc;
       in
-      basePkg.overrideAttrs (old: {
+      stamped.overrideAttrs (old: {
         postInstall = (old.postInstall or "") + ''
           mkdir -p $out/lib/python3.12/site-packages
           for mod in hermes_state_common hermes_state_portability hermes_state_schema hermes_state_search; do
-            if [ -f "${pythonSrc}/$mod.py" ]; then
-              cp -f "${pythonSrc}/$mod.py" "$out/lib/python3.12/site-packages/$mod.py"
+            if [ -f "${pythonSrcStamped}/$mod.py" ]; then
+              cp -f "${pythonSrcStamped}/$mod.py" "$out/lib/python3.12/site-packages/$mod.py"
             fi
           done
           # Re-wrap each hermes entry-point to inject the patched site-packages
