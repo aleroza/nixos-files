@@ -36,6 +36,7 @@
   imports = [
     ./aphrodite.nix
     ./hindsight.nix
+    ./jev.nix
     ./openviking.nix
   ];
 
@@ -196,6 +197,18 @@
     # ownership. The gateway picks up plugins from ~/.hermes/
     # plugins/ at startup automatically; no settings.plugins.*
     # wiring needed here (that's the path for non-NixOS installs).
+    #
+    # The Jev plugins (see ./jev.nix) are the exception: they are
+    # installed by that module's activation script but stay disabled
+    # until TYPESAFE_API_KEY exists — it is a runtime secret, not a Nix
+    # input, so enablement cannot be decided at build time. The deny-list
+    # wins over plugins.enabled, so listing them here keeps them inert
+    # without touching the allow-list.
+    settings.plugins.disabled = [
+      "jev"
+      "jev-approvals"
+      "jev-cron-gate"
+    ];
     # v0.20.0 renamed smartPolicy -> smart_policy. The camelCase form
     # (set through the NixOS module until the rename) is silently
     # ignored by the new schema, so the guardian would never escalate
