@@ -36,7 +36,7 @@
   imports = [
     ./aphrodite.nix
     ./hindsight.nix
-    ./jev.nix
+    # ./jev.nix
     ./openviking.nix
   ];
 
@@ -368,15 +368,13 @@
       let
         basePkg = hermes-agent.packages.x86_64-linux.default;
         pythonSrc = basePkg.hermesNpmLib.pythonSrc;
-        stamped = basePkg.override { version = "0.21.6"; };
-        pythonSrcStamped = stamped.hermesNpmLib.pythonSrc;
       in
-      stamped.overrideAttrs (old: {
+      basePkg.overrideAttrs (old: {
         postInstall = (old.postInstall or "") + ''
           mkdir -p $out/lib/python3.12/site-packages
           for mod in hermes_state_common hermes_state_portability hermes_state_schema hermes_state_search; do
-            if [ -f "${pythonSrcStamped}/$mod.py" ]; then
-              cp -f "${pythonSrcStamped}/$mod.py" "$out/lib/python3.12/site-packages/$mod.py"
+            if [ -f "${pythonSrc}/$mod.py" ]; then
+              cp -f "${pythonSrc}/$mod.py" "$out/lib/python3.12/site-packages/$mod.py"
             fi
           done
           # Re-wrap each hermes entry-point to inject the patched site-packages
