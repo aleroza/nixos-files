@@ -197,6 +197,25 @@
     # ownership. The gateway picks up plugins from ~/.hermes/
     # plugins/ at startup automatically; no settings.plugins.*
     # wiring needed here (that's the path for non-NixOS installs).
+    #
+    # The Jev plugins (see ./jev.nix) DO need the allow-list: they are
+    # opt-in, and `plugins.enabled` is what turns them on. All three
+    # need TYPESAFE_API_KEY, which ships in the sops secret above and
+    # lands in ~/.hermes/.env at activation time.
+    #
+    # Note on the config merge: the activation script DEEP-MERGES this
+    # rendered config into the on-disk ~/.hermes/config.yaml. A key
+    # present on disk but absent here SURVIVES the merge — so removing
+    # a plugin from this list does NOT disable it, and a stale
+    # `plugins.disabled` entry keeps a plugin out even after it is
+    # added here. Both lists must be edited together, or the on-disk
+    # file cleaned by hand.
+    settings.plugins.enabled = [
+      "aphrodite"
+      "jev"
+      "jev-approvals"
+      "jev-cron-gate"
+    ];
 
     # v0.20.0 renamed smartPolicy -> smart_policy. The camelCase form
     # (set through the NixOS module until the rename) is silently
@@ -364,6 +383,14 @@
     # through `.override { ... }` — `overrideAttrs` would be too late,
     # the stamp file is already rendered by then. Keep the value in sync
     # with the hermes-agent input's tag in flake.lock.
+    #
+    # DO NOT re-introduce `.override { version = ...; }` here: it
+    # re-derives the whole hermes-agent package, and the resulting
+    # generation fails to boot with "Switch root target contains no
+    # usable init" (verified 2026-11-01: reverting this override was
+    # the only thing that made the new generation bootable). The
+    # version stamp is not worth a broken bootloader — the plugins that
+    # need a >=0.21 floor are the optional ones.
     package =
       let
         basePkg = hermes-agent.packages.x86_64-linux.default;
