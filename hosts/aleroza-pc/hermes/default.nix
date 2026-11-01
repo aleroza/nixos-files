@@ -36,7 +36,7 @@
   imports = [
     ./aphrodite.nix
     ./hindsight.nix
-    # ./jev.nix
+    ./jev.nix
     ./openviking.nix
   ];
 
